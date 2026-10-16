@@ -1,0 +1,27 @@
+name: pr notes
+description: "One sticky note on a pull request for the first-run situations that otherwise end in a green check and no comment (the pipeline is added by this pull request; no workspaces found)"
+inputs:
+  mode:
+    description: "introduced | no-workspaces | clear"
+    required: true
+  base_sha: { default: "", description: "base commit of the pull request (introduced)" }
+  config: { default: .tfpls.yml }
+  pr_number: { required: true }
+  github_token: { default: "${{ github.token }}" }
+outputs:
+  introduced:
+    description: "mode introduced: true when the caller workflow does not exist on the base commit"
+    value: ${{ steps.n.outputs.introduced }}
+runs:
+  using: composite
+  steps:
+    - id: n
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        BASE_SHA: ${{ inputs.base_sha }}
+        WF_REF: ${{ github.workflow_ref }}
+        REPO: ${{ github.repository }}
+        PR: ${{ inputs.pr_number }}
+        CONFIG: ${{ inputs.config }}
+      run: ${{ github.action_path }}/notes.sh ${{ inputs.mode }}

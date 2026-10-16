@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Inspect a saved tfpls plan downloaded from a workflow run.
+#   tfpls-plan decrypt <plan.tgz.enc|plan.tgz> [outdir]   extract tfplan + meta.json (outdir default: ./tfpls-plan-out)
+#   tfpls-plan show    <plan.tgz.enc|plan.tgz> [tf-dir]   print metadata, then the human-readable plan
+# Encrypted plans need the key: export PLAN_ENCRYPTION_KEY=...  (never pass it on the command line)
+# `show` needs `tofu` (or `terraform`) and the same provider/backend setup as the workspace (run it inside the
+# stack directory after `tofu init`); `decrypt` only needs openssl, tar and jq.
+set -uo pipefail
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../actions/tofu/plan-store.sh
+. "$here/../actions/tofu/plan-store.sh"
+
+die() { echo "tfpls-plan: $*" >&2; exit 1; }
+cmd=${1:-}; file=${2:-}
+[ -n "$cmd" ] && [ -n "$file" ] && [ -f "$file" ] || die "usage: tfpls-plan decrypt|show <file> [dir]   (see header of this script)"
+
+case "$cmd" in
+  decrypt)
+    out=${3:-./tfpls-plan-out}
+    tfpls_unpack "$file" "$out" || die "$TFPLS_ERR"
+    echo "extracted to $out"; jq . "$out/meta.json";;
+  show)
+    dir=${3:-.}; tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+    tfpls_unpack "$file" "$tmp" || die "$TFPLS_ERR"
+    echo "--- metadata"; jq . "$tmp/meta.json"
+    tf=$(command -v tofu || command -v terraform) || die "tofu/terraform not found (use 'decrypt' to just extract)"
+    echo "--- plan"; (cd "$dir" && "$tf" show -no-color "$tmp/tfplan");;
+  *) die "unknown command: $cmd";;
+esac

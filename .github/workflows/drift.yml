@@ -1,0 +1,103 @@
+# Reusable: scheduled drift detection over all workspaces (plan only; a workspace's `drift_remediate` setting makes it apply drift).
+# Caller needs: on: schedule/workflow_dispatch; permissions: contents: write (audit), id-token: write
+name: tfpls drift
+on:
+  workflow_call:
+    inputs:
+      config: { type: string, default: .tfpls.yml }
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","dedicated-terraform"]' }
+      audit: { type: boolean, default: true, description: "append an audit event per run to the data branch (the caller needs contents: write)" }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.10.6" }
+      max_parallel: { type: number, default: 4, description: "how many workspaces are planned/applied at the same time" }
+      timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
+      drift_issues: { type: boolean, default: true, description: "open and close one issue per drifted workspace (alerts are sent on transitions either way: drifted, recovered, failing)" }
+      apply_environment: { type: string, default: "", description: "GitHub Environment used by apply-capable jobs (holds the apply credentials; can require reviewers)" }
+    secrets:
+      TFPLS_ENV_JSON: { required: false }
+      SLACK_WEBHOOK: { required: false }
+
+jobs:
+  detect:
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.d.outputs.matrix }}
+      any: ${{ steps.d.outputs.any }}
+      entries: ${{ steps.d.outputs.entries }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - id: d
+        uses: denzhel/tfpls/actions/detect-workspaces@main
+        with: { config: "${{ inputs.config }}", mode: all }
+
+  drift:
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    environment: ${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate || 'never') != 'never' && inputs.apply_environment || null }}
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: write, issues: write, id-token: write, actions: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.max_parallel }}
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    concurrency:
+      # a check that changes nothing must not sit in the apply group: GitHub keeps one pending run per group and would cancel a pending apply
+      group: tfpls-${{ github.repository }}-${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate == 'never' || fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate == '') && '-drift' || '' }}
+      cancel-in-progress: false
+    steps:
+      - uses: denzhel/tfpls/actions/prepare@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          tofu_version: ${{ inputs.tofu_version }}
+          role_arn: ${{ vars.TFPLS_ROLE_ARN }}
+          json: ${{ secrets.TFPLS_ENV_JSON }}
+      - id: t
+        uses: denzhel/tfpls/actions/tofu@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          auto_apply: ${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate || 'never') }}
+          apply: ${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate || 'never') != 'never' && 'auto' || 'none' }}
+      - id: s
+        if: always()
+        shell: bash
+        env: { S: "${{ steps.t.outputs.status }}" }
+        run: |
+          case "$S" in
+            no-changes|applied) echo "state=in-sync" >> "$GITHUB_OUTPUT";;
+            planned|skipped) echo "state=drift" >> "$GITHUB_OUTPUT";;
+            *) echo "state=error" >> "$GITHUB_OUTPUT";;
+          esac
+      # always: the drift state on the data branch feeds the dashboard and the alerts (transitions); drift_issues only decides about the issues
+      - id: tr
+        if: always()
+        uses: denzhel/tfpls/actions/drift-report@main
+        with:
+          issues: ${{ inputs.drift_issues }}
+          name: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}
+          label: ${{ matrix.label }}
+          state: ${{ steps.s.outputs.state || 'error' }}
+          summary: ${{ steps.t.outputs.summary }}
+      # alerts only on transitions (drifted, recovered, failing); when the state could not be stored (unstored) any non-clean result alerts
+      - if: always()
+        uses: denzhel/tfpls/actions/finish@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          label: ${{ matrix.label }}
+          webhook: ${{ secrets[fromJSON(needs.detect.outputs.entries)[matrix.label].notify_secret || 'SLACK_WEBHOOK'] }}
+          notify: ${{ steps.tr.outputs.transition != '' && steps.tr.outputs.transition != 'none' && (steps.tr.outputs.transition != 'unstored' || steps.s.outputs.state != 'in-sync') }}
+          notify_kind: ${{ format('drift ({0})', steps.tr.outputs.transition) }}
+          template_ref: ${{ github.event.repository.default_branch }}
+          kind: drift
+          status: ${{ steps.s.outputs.state || 'error' }}
+          summary: ${{ steps.t.outputs.summary }}
+          counts: ${{ steps.t.outputs.counts }}
+          changes: ${{ steps.t.outputs.changes }}
+          changes_more: ${{ steps.t.outputs.changes_more }}
+          duration: ${{ steps.t.outputs.duration }}
+          via: ${{ steps.t.outputs.status == 'applied' && 'drift-remediate' || 'drift-check' }}
+          audit: ${{ inputs.audit }}

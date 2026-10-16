@@ -1,0 +1,59 @@
+name: record
+description: Append one audit event (who did what to which workspace, with what result) to the data branch
+inputs:
+  workspace:
+    description: Workspace name (the stack/workspace name used in comments)
+    required: true
+  kind:
+    description: "apply | plan | unlock | drift"
+    required: true
+  status:
+    description: "Result: applied | no-changes | planned | skipped | policy-failed | error | unlocked ..."
+    required: true
+  summary:
+    default: ""
+  counts:
+    description: 'JSON like {"add":1,"change":0,"destroy":0,"replace":0} (from the tofu action)'
+    default: ""
+  duration:
+    description: "seconds the run took"
+    default: ""
+  lock_id:
+    description: "state lock ID (unlock events)"
+    default: ""
+  via:
+    description: "how the run was triggered: auto-apply | comment | drift-remediate | drift-check | lock-sweep"
+    default: ""
+  reviewed:
+    description: "true when a reviewed plan was applied"
+    default: ""
+  pr:
+    default: ""
+  branch:
+    description: Branch that holds the log
+    default: tfpls-data
+  github_token:
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        WORKSPACE: ${{ inputs.workspace }}
+        KIND: ${{ inputs.kind }}
+        STATUS: ${{ inputs.status }}
+        SUMMARY: ${{ inputs.summary }}
+        COUNTS: ${{ inputs.counts }}
+        REVIEWED: ${{ inputs.reviewed }}
+        DURATION: ${{ inputs.duration }}
+        LOCK_ID: ${{ inputs.lock_id }}
+        VIA: ${{ inputs.via }}
+        PR: ${{ inputs.pr }}
+        BRANCH: ${{ inputs.branch }}
+        TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        ACTOR: ${{ github.actor }}
+        TRIGGER: ${{ github.event_name }}
+        SHA: ${{ github.sha }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: ${{ github.action_path }}/record.sh

@@ -1,0 +1,260 @@
+# Reusable: PR comment commands.
+#   /tofu plan  [workspace|glob|all ...]            (no args = workspaces changed by the PR)
+#   /tofu apply <workspace|glob|all ...> | <workspace> -target=addr [-target=addr ...]
+#   /tofu unlock <workspace>                        (releases a stuck state lock; needs `actions: read`)
+# Caller needs: on: issue_comment: types: [created]
+#   permissions: contents: read, pull-requests: write, issues: write, id-token: write, actions: read
+# Same-repo PRs only (fork code never gets credentials). Commenter needs write access.
+name: tfpls comment ops
+on:
+  workflow_call:
+    inputs:
+      config: { type: string, default: .tfpls.yml }
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","dedicated-terraform"]' }
+      audit: { type: boolean, default: true, description: "append an audit event per run to the data branch (the caller needs contents: write)" }
+      queue: { type: boolean, default: false, description: "first-come-first-served queue per workspace instead of GitHub's concurrency group, which cancels the middle run (tickets on the data branch; the caller needs contents: write)" }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.10.6" }
+      max_parallel: { type: number, default: 4, description: "how many workspaces are planned/applied at the same time" }
+      timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
+      apply_environment: { type: string, default: "", description: "GitHub Environment used by apply-capable jobs (/tofu apply, /tofu unlock); holds the apply credentials, can require reviewers" }
+      require_up_to_date: { type: boolean, default: true, description: "apply needs the PR branch to include the base branch" }
+    secrets:
+      TFPLS_ENV_JSON: { required: false }
+      SLACK_WEBHOOK: { required: false }
+      PLAN_ENCRYPTION_KEY: { required: false, description: 'encrypts saved plans (recommended); see docs/reviewed-plans.md' }
+
+jobs:
+  parse:
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/tofu ')
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: read, pull-requests: write, issues: write, actions: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: 10
+    outputs:
+      cmd: ${{ steps.p.outputs.cmd }}
+      targets: ${{ steps.p.outputs.targets }}
+      sha: ${{ steps.p.outputs.sha }}
+      now: ${{ steps.p.outputs.now }}
+      matrix: ${{ steps.d.outputs.matrix }}
+      any: ${{ steps.d.outputs.any }}
+      # for apply the policy settings (policy_*, notify_secret) come from the default branch (steps.a), the rest from the pull request
+      entries: ${{ steps.a.outputs.entries || steps.d.outputs.entries }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BODY: ${{ github.event.comment.body }}
+      ACTOR: ${{ github.event.comment.user.login }}
+      PR: ${{ github.event.issue.number }}
+      COMMENT_ID: ${{ github.event.comment.id }}
+      REQUIRE_UTD: ${{ inputs.require_up_to_date }}
+    steps:
+      - id: p
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -f   # comment words are never glob-expanded against the runner directory
+          # tell the user why a command was rejected: reply on the PR (errors used to be visible only in the run log)
+          fail() {
+            echo "::error::$1"
+            local shown=${BODY//\`/}; shown=$(head -n1 <<<"$shown" | cut -c1-120)
+            # user-controlled text goes into a markdown comment: drop backticks, escape < and > (GitHub would hide <tags>)
+            local msg=${1//\`/}; msg=$(printf '%s' "$msg" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "❌ \`$shown\`: $msg" >/dev/null 2>&1 || true
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=confused >/dev/null 2>&1 || true
+            exit 1
+          }
+          perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
+          [[ "$perm" == admin || "$perm" == write || "$perm" == maintain ]] || { fail "$ACTOR lacks write access"; }
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes >/dev/null || true
+
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")
+          [ "$(jq -r .state <<<"$pr")" = open ] || { fail "this pull request is not open"; }
+          [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$GITHUB_REPOSITORY" ] || { fail "fork PRs are not supported"; }
+          sha=$(jq -r .head.sha <<<"$pr"); base=$(jq -r .base.ref <<<"$pr")
+
+          read -r _ cmd rest <<<"$(head -n1 <<<"$BODY" | tr -d '\r')"
+          [[ "$cmd" == plan || "$cmd" == apply || "$cmd" == unlock ]] || { fail "unknown command: $cmd"; }
+          names=""; targets=""; now=false
+          for tok in $rest; do
+            if [[ "$tok" == --now ]]; then now=true
+            elif [[ "$tok" == -target=* ]]; then targets+="${tok#-target=} "
+            elif [[ "$tok" =~ ^[A-Za-z0-9_./*?-]+$ && "$tok" != -* ]]; then names+="$tok "
+            else fail "unexpected argument: $tok"; fi
+          done
+          names="${names% }"
+          # --now: a repository admin applies without the approvals the repository's rules ask for (night, emergency). Everything else still holds.
+          if [ "$now" = true ]; then
+            [ "$cmd" = apply ] || { fail "--now only goes with /tofu apply"; }
+            [ "$perm" = admin ] || { fail "only repository admins can use --now (you have $perm access)"; }
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "⚡ **\`--now\`** used by @$ACTOR: the approvals the repository asks for are skipped for this apply. The reviewed plan, the policies and the up-to-date check still apply. Someone should review this afterwards." >/dev/null 2>&1 || true
+          fi
+          if [ -n "$targets" ]; then
+            if [ -z "$names" ] || [[ "$names" == *" "* || "$names" == *"*"* || "$names" == all ]]; then
+              fail "-target requires exactly one workspace (no globs/all)"
+            fi
+          fi
+          if [ "$cmd" = unlock ]; then
+            if [ -n "$targets" ] || [ -z "$names" ] || [[ "$names" == *" "* || "$names" == *"*"* || "$names" == *"?"* || "$names" == all ]]; then
+              fail "usage: /tofu unlock <workspace> (exactly one, no globs)"
+            fi
+          fi
+          if [ "$cmd" = apply ] && [ -z "$names" ]; then
+            fail "apply needs explicit workspace(s): /tofu apply <workspace…|glob|all>"
+          fi
+
+          if [ "$cmd" = apply ]; then
+            # approvals (enabled / mode / required, per workspace) are checked after the workspaces are known: actions/approvals
+            if [ "$REQUIRE_UTD" = true ]; then
+              behind=$(gh api "repos/$GITHUB_REPOSITORY/compare/$base...$sha" --jq .behind_by)
+              [ "$behind" = 0 ] || { fail "branch is $behind commits behind $base; update it first"; }
+            fi
+          fi
+          { echo "cmd=$cmd"; echo "now=$now"; echo "targets=${targets% }"; echo "sha=$sha"; echo "names=$names"; echo "base=$(jq -r .base.sha <<<"$pr")"; echo "base_ref=$(jq -r .base.ref <<<"$pr")"; } >> "$GITHUB_OUTPUT"
+
+      # /tofu unlock runs tofu init and plan with the apply role, so it never runs code of the pull request: it uses the default branch
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          ref: ${{ steps.p.outputs.cmd == 'unlock' && github.event.repository.default_branch || steps.p.outputs.sha }}
+          fetch-depth: 0
+      - id: d
+        uses: denzhel/tfpls/actions/detect-workspaces@main
+        with:
+          config: ${{ inputs.config }}
+          mode: changed
+          base_ref: ${{ steps.p.outputs.base }}
+          name: ${{ steps.p.outputs.names }}
+
+      # the approval rules are read from the DEFAULT branch (never from this pull request's own config); only reviews of people with write access count
+      - name: Approvals
+        id: a
+        if: steps.p.outputs.cmd == 'apply' && steps.d.outputs.any == 'true'
+        uses: denzhel/tfpls/actions/approvals@main
+        with:
+          enforce: ${{ steps.p.outputs.now != 'true' }}   # --now by an admin: the rules (policy settings) are still read from the default branch, the approvals are not checked
+          entries: ${{ steps.d.outputs.entries }}
+          config: ${{ inputs.config }}
+          default_branch: ${{ github.event.repository.default_branch }}
+          sha: ${{ steps.p.outputs.sha }}
+          pr_number: ${{ github.event.issue.number }}
+          comment_id: ${{ github.event.comment.id }}
+
+      - name: CODEOWNERS approvals
+        if: steps.a.outputs.codeowners == 'true' && steps.p.outputs.cmd == 'apply' && steps.p.outputs.now != 'true' && steps.d.outputs.any == 'true'
+        uses: denzhel/tfpls/actions/codeowners@main
+        with:
+          entries: ${{ steps.a.outputs.owner_entries }}
+          sha: ${{ steps.p.outputs.sha }}
+          base: ${{ github.event.repository.default_branch }}
+          pr_number: ${{ github.event.issue.number }}
+          comment_id: ${{ github.event.comment.id }}
+
+      - name: tell the user when nothing matched
+        if: steps.d.outputs.any != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          NAMES: ${{ steps.p.outputs.names }}
+          CMD: ${{ steps.p.outputs.cmd }}
+        run: |
+          if [ -n "$NAMES" ]; then
+            msg="No workspace matches \`$NAMES\`. Check the spelling; workspaces are the names in the PR plan comments and in the config file."
+          else
+            msg="This pull request changes no workspace, so there is nothing to $CMD. Name a workspace, for example \`/tofu $CMD <workspace>\`."
+          fi
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "ℹ️ $msg" >/dev/null || true
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=confused >/dev/null || true
+
+  # One job for /tofu plan, apply and unlock, so that no sibling jobs are left "skipped" on the run page.
+  #   plan   -> no environment, saves the reviewed plan
+  #   apply  -> (+ apply_environment), applies ONLY the reviewed plan
+  #   unlock -> (+ apply_environment), releases a stuck state lock
+  command:
+    needs: parse
+    if: needs.parse.outputs.any == 'true'
+    environment: ${{ needs.parse.outputs.cmd != 'plan' && inputs.apply_environment || null }}
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: ${{ needs.parse.outputs.cmd == 'unlock' && 15 || inputs.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ needs.parse.outputs.cmd == 'plan' && 20 || inputs.max_parallel }}   # a plan writes nothing shared
+      matrix: ${{ fromJSON(needs.parse.outputs.matrix) }}
+    # unlock is deliberately NOT in the workspace group: it must not queue behind the run it is unblocking; /tofu plan changes
+    # nothing and must not displace a pending apply (GitHub keeps one pending run per group)
+    concurrency:
+      group: tfpls-${{ github.repository }}-${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}${{ needs.parse.outputs.cmd == 'unlock' && '-unlock' || '' }}${{ needs.parse.outputs.cmd == 'plan' && '-plan' || '' }}${{ inputs.queue && needs.parse.outputs.cmd == 'apply' && format('-{0}', github.run_id) || '' }}
+      cancel-in-progress: false
+    steps:
+      - if: inputs.queue && needs.parse.outputs.cmd == 'apply'
+        uses: denzhel/tfpls/actions/queue@main
+        with:
+          mode: enter
+          name: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
+          label: ${{ matrix.label }}
+          pr_number: ${{ github.event.issue.number }}
+          timeout_minutes: ${{ inputs.timeout_minutes }}
+      # `after:` in the config: when several workspaces are applied together, wait for their predecessors
+      - uses: denzhel/tfpls/actions/wait-for@main
+        with:
+          jobs: ${{ needs.parse.outputs.cmd == 'apply' && fromJSON(needs.parse.outputs.entries)[matrix.label].wait_for || '' }}
+          timeout_minutes: ${{ inputs.timeout_minutes }}
+      - uses: denzhel/tfpls/actions/prepare@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
+          ref: ${{ needs.parse.outputs.cmd == 'unlock' && github.event.repository.default_branch || needs.parse.outputs.sha }}
+          tofu_version: ${{ inputs.tofu_version }}
+          role_arn: ${{ vars.TFPLS_ROLE_ARN }}
+          report_pr: ${{ strategy.job-index == 0 && github.event.issue.number || '' }}
+          json: ${{ secrets.TFPLS_ENV_JSON }}
+      - id: t
+        if: needs.parse.outputs.cmd != 'unlock'
+        uses: denzhel/tfpls/actions/tofu@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
+          targets: ${{ needs.parse.outputs.targets }}
+          pr_number: ${{ github.event.issue.number }}
+          apply: ${{ needs.parse.outputs.cmd == 'apply' && 'force' || 'none' }}
+          head_sha: ${{ needs.parse.outputs.sha }}
+          # /tofu plan saves the reviewed plan; /tofu apply applies ONLY that reviewed plan (never re-plans)
+          plan_mode: ${{ needs.parse.outputs.cmd == 'apply' && 'reviewed_only' || 'fresh' }}
+          save_plan: ${{ needs.parse.outputs.cmd == 'plan' && 'true' || 'false' }}
+          plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
+      - id: u
+        if: needs.parse.outputs.cmd == 'unlock'
+        uses: denzhel/tfpls/actions/unlock@main
+        with:
+          name: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
+          label: ${{ matrix.label }}
+          dir: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].dir }}
+          workspace: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].workspace }}
+          pr_number: ${{ github.event.issue.number }}
+      - if: always() && inputs.audit && needs.parse.outputs.cmd == 'unlock'
+        uses: denzhel/tfpls/actions/record@main
+        with:
+          workspace: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
+          kind: unlock
+          status: ${{ steps.u.outputs.result || 'error' }}
+          lock_id: ${{ steps.u.outputs.lock_id }}
+          via: comment
+          pr: ${{ github.event.issue.number }}
+      - if: always() && needs.parse.outputs.cmd == 'apply'
+        uses: denzhel/tfpls/actions/finish@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
+          label: ${{ matrix.label }}
+          webhook: ${{ secrets[fromJSON(needs.parse.outputs.entries)[matrix.label].notify_secret || 'SLACK_WEBHOOK'] }}
+          template_ref: ${{ github.event.repository.default_branch }}
+          pr: ${{ github.event.issue.number }}
+          status: ${{ steps.t.outputs.status || 'error' }}
+          summary: ${{ steps.t.outputs.summary }}
+          counts: ${{ steps.t.outputs.counts }}
+          changes: ${{ steps.t.outputs.changes }}
+          changes_more: ${{ steps.t.outputs.changes_more }}
+          duration: ${{ steps.t.outputs.duration }}
+          reviewed: ${{ steps.t.outputs.reviewed }}
+          via: ${{ needs.parse.outputs.now == 'true' && 'comment-now' || 'comment' }}
+          audit: ${{ inputs.audit }}
+          queue: ${{ inputs.queue }}

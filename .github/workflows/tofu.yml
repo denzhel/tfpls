@@ -1,0 +1,126 @@
+# The one workflow a repository needs. It routes by the event that started it:
+#   pull_request     -> plan each changed workspace (comment, saved reviewed plan)
+#   issue_comment    -> /tofu plan | apply | unlock on a pull request; /tofu plan | apply | fix on a `Drift: <workspace>` issue
+#   push (main)      -> apply per the workspace's auto_apply
+#   schedule         -> drift check, dashboard refresh
+#   workflow_dispatch-> the same, or one `task` (drift | locks | dashboard | fix); `locks` only on request
+# Everything is optional below; nothing needs to be set for the common case. See docs/getting-started.md.
+# The caller declares the triggers and grants the permissions (GitHub does not allow a reusable workflow to do either):
+#   on: { pull_request, issue_comment: { types: [created] }, push: { branches: [main] }, schedule, workflow_dispatch }
+#   permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }
+#   jobs: { tofu: { uses: denzhel/tfpls/.github/workflows/tofu.yml@v0, secrets: inherit } }
+name: tfpls
+on:
+  workflow_call:
+    inputs:
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","tofu"]' }
+      config: { type: string, default: .tfpls.yml, description: "config file with defaults and overrides (optional)" }
+      tofu_version: { type: string, default: "", description: "empty = .opentofu-version / .terraform-version / an exact required_version, else 1.10.6" }
+      apply_environment: { type: string, default: "", description: "GitHub Environment that holds the apply credentials (required reviewers)" }
+      audit: { type: boolean, default: true, description: "append an audit event per apply, drift check and unlock to the tfpls-data branch" }
+      drift_issues: { type: boolean, default: true, description: "one issue per drifted workspace (alerts are sent on transitions either way)" }
+      queue: { type: boolean, default: false, description: "first-come-first-served apply queue per workspace" }
+      require_up_to_date: { type: boolean, default: true, description: "/tofu apply refuses a pull request that is behind its base branch" }
+      max_parallel: { type: number, default: 4, description: "workspaces applied, drift-checked or fixed at the same time (pull request plans always run up to 20)" }
+      timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    uses: denzhel/tfpls/.github/workflows/plan.yml@main
+    with:
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      runs_on: ${{ inputs.runs_on }}
+      config: ${{ inputs.config }}
+      tofu_version: ${{ inputs.tofu_version }}
+    secrets: inherit
+
+  comment:
+    if: github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.pull_request
+    uses: denzhel/tfpls/.github/workflows/comment-ops.yml@main
+    with:
+      require_up_to_date: ${{ inputs.require_up_to_date }}
+      max_parallel: ${{ inputs.max_parallel }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      runs_on: ${{ inputs.runs_on }}
+      config: ${{ inputs.config }}
+      tofu_version: ${{ inputs.tofu_version }}
+      apply_environment: ${{ inputs.apply_environment }}
+      audit: ${{ inputs.audit }}
+      queue: ${{ inputs.queue }}
+    secrets: inherit
+
+  apply:
+    # only the default branch applies: a caller with `push:` and no branch filter must not apply from a feature branch
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    uses: denzhel/tfpls/.github/workflows/apply.yml@main
+    with:
+      max_parallel: ${{ inputs.max_parallel }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      runs_on: ${{ inputs.runs_on }}
+      config: ${{ inputs.config }}
+      tofu_version: ${{ inputs.tofu_version }}
+      apply_environment: ${{ inputs.apply_environment }}
+      audit: ${{ inputs.audit }}
+      queue: ${{ inputs.queue }}
+    secrets: inherit
+
+  # schedule, or a manual run without a task, or a manual run with task = drift
+  drift:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.task == '' || github.event.inputs.task == null || github.event.inputs.task == 'drift'))
+    uses: denzhel/tfpls/.github/workflows/drift.yml@main
+    with:
+      max_parallel: ${{ inputs.max_parallel }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      runs_on: ${{ inputs.runs_on }}
+      config: ${{ inputs.config }}
+      tofu_version: ${{ inputs.tofu_version }}
+      apply_environment: ${{ inputs.apply_environment }}
+      audit: ${{ inputs.audit }}
+      drift_issues: ${{ inputs.drift_issues }}
+    secrets: inherit
+
+  # only on request: nothing releases a state lock by itself (the schedule never runs this job)
+  locks:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'locks'
+    uses: denzhel/tfpls/.github/workflows/locks.yml@main
+    with:
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      runs_on: ${{ inputs.runs_on }}
+      config: ${{ inputs.config }}
+      tofu_version: ${{ inputs.tofu_version }}
+      apply_environment: ${{ inputs.apply_environment }}
+      audit: ${{ inputs.audit }}
+      workspaces: ${{ github.event.inputs.workspaces }}
+    secrets: inherit
+
+  dashboard:
+    needs: [drift]
+    if: >-
+      !cancelled() && (github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.task == '' || github.event.inputs.task == null || github.event.inputs.task == 'dashboard')))
+    uses: denzhel/tfpls/.github/workflows/dashboard.yml@main
+    with:
+      runs_on: ${{ inputs.runs_on }}
+      commit_page: true
+    secrets: inherit
+
+  # fix a drifted workspace on demand: a comment on its `Drift: <workspace>` issue, or the manual task `fix`
+  fix:
+    if: >-
+      (github.event_name == 'issue_comment' && github.event.action == 'created' && !github.event.issue.pull_request) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'fix')
+    uses: denzhel/tfpls/.github/workflows/drift-fix.yml@main
+    with:
+      max_parallel: ${{ inputs.max_parallel }}
+      timeout_minutes: ${{ inputs.timeout_minutes }}
+      runs_on: ${{ inputs.runs_on }}
+      config: ${{ inputs.config }}
+      tofu_version: ${{ inputs.tofu_version }}
+      apply_environment: ${{ inputs.apply_environment }}
+      audit: ${{ inputs.audit }}
+      workspaces: ${{ github.event.inputs.workspaces }}
+      step: ${{ github.event.inputs.step }}
+    secrets: inherit

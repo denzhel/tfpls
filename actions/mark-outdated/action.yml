@@ -1,0 +1,23 @@
+name: mark outdated plan comments
+description: Marks the sticky plan comments of workspaces that the latest commit of the PR no longer touches, so nobody reads a stale plan as current
+inputs:
+  pr_number:
+    required: true
+  names:
+    description: "the `names` output of detect-workspaces (a JSON array of workspace names); workspaces not listed are marked"
+    required: true
+  sha:
+    description: head SHA of the pull request
+    required: true
+  github_token:
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR: ${{ inputs.pr_number }}
+        NAMES: ${{ inputs.names }}
+        SHA: ${{ inputs.sha }}
+      run: ${{ github.action_path }}/mark.sh

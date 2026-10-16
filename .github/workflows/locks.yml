@@ -1,0 +1,44 @@
+# Reusable: show who holds the state lock of every workspace (the manual `locks` task). It releases nothing by itself: a lock is
+# released only for workspaces named in `workspaces`, and only when it is at least 5 minutes old and no run of this repository is
+# active on that workspace (the rules of /tofu unlock).
+# Caller needs: on: workflow_dispatch; permissions: contents: read (write with audit: true), actions: read, id-token: write
+name: tfpls locks
+on:
+  workflow_call:
+    inputs:
+      config: { type: string, default: .tfpls.yml }
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","dedicated-terraform"]' }
+      workspaces: { type: string, default: "", description: "names (or labels) of the workspaces whose lock is released; empty = only show the locks" }
+      audit: { type: boolean, default: true, description: "append an audit event for every lock released by name (the caller needs contents: write)" }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.10.6" }
+      timeout_minutes: { type: number, default: 60, description: "time limit of the whole check (workspaces are checked one after the other, 10 minutes each at most)" }
+      apply_environment: { type: string, default: "", description: "GitHub Environment that holds the apply credentials" }
+    secrets:
+      TFPLS_ENV_JSON: { required: false, description: "apply credentials: releasing a lock deletes or updates the lock in the state backend" }
+      SLACK_WEBHOOK: { required: false }
+
+jobs:
+  # one job looks at every workspace in turn (a runner per workspace would bill a minute each for a few seconds of work)
+  locks:
+    environment: ${{ inputs.apply_environment || null }}
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: write, id-token: write, actions: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    # lowering timeout_minutes must not cut the check of many workspaces short
+    timeout-minutes: ${{ inputs.timeout_minutes < 60 && 60 || inputs.timeout_minutes }}
+    # deliberately no concurrency group: waiting behind a hung run would defeat the check (unlock.sh looks for active runs itself)
+    steps:
+      - uses: denzhel/tfpls/actions/prepare@main
+        with:
+          tofu_version: ${{ inputs.tofu_version }}
+          role_arn: ${{ vars.TFPLS_ROLE_ARN }}
+          json: ${{ secrets.TFPLS_ENV_JSON }}
+      - id: d
+        uses: denzhel/tfpls/actions/detect-workspaces@main
+        with: { config: "${{ inputs.config }}", mode: all }
+      - if: steps.d.outputs.any == 'true'
+        uses: denzhel/tfpls/actions/unlock@main
+        with:
+          sweep_entries: ${{ steps.d.outputs.entries }}
+          release: ${{ inputs.workspaces }}
+          audit: ${{ inputs.audit }}

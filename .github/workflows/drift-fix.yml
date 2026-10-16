@@ -1,0 +1,132 @@
+# Reusable: fix a drifted workspace on demand, without a pull request.
+#   On an open issue `Drift: <workspace>` (opened by the drift check), a comment from someone with write access:
+#     /tofu plan   [-target=addr ...]   plan the workspace from the default branch now, save the reviewed plan, post it on the issue
+#     /tofu apply  [-target=addr ...]   apply exactly that saved plan (refused with the reason when it is stale)
+#     /tofu fix    [-target=addr ...]   plan and apply in one run
+#   Or a manual run (task `fix`): inputs workspaces (names) and step (plan | apply | fix).
+# Caller needs: on: issue_comment: types: [created] and workflow_dispatch;
+#   permissions: contents: write (audit), issues: write, id-token: write, actions: read
+name: tfpls drift fix
+on:
+  workflow_call:
+    inputs:
+      config: { type: string, default: .tfpls.yml }
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels' }
+      workspaces: { type: string, default: "", description: "manual run: workspace names to fix (space or comma separated)" }
+      step: { type: string, default: fix, description: "manual run: plan | apply | fix" }
+      audit: { type: boolean, default: true, description: "append an audit event per fix to the data branch" }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for" }
+      max_parallel: { type: number, default: 4 }
+      timeout_minutes: { type: number, default: 60 }
+      apply_environment: { type: string, default: "", description: "GitHub Environment used by the jobs that apply (can require reviewers)" }
+    secrets:
+      TFPLS_ENV_JSON: { required: false }
+      SLACK_WEBHOOK: { required: false }
+      PLAN_ENCRYPTION_KEY: { required: false, description: 'encrypts saved plans (recommended); see docs/reviewed-plans.md' }
+
+jobs:
+  parse:
+    if: github.event_name == 'workflow_dispatch' || (github.event.issue && !github.event.issue.pull_request && startsWith(github.event.comment.body, '/tofu '))
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: read, issues: write, actions: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: 10
+    outputs:
+      ok: ${{ steps.p.outputs.ok }}
+      cmd: ${{ steps.p.outputs.cmd }}
+      targets: ${{ steps.p.outputs.targets }}
+      sha: ${{ steps.p.outputs.sha }}
+      issue: ${{ steps.p.outputs.issue }}
+      matrix: ${{ steps.f.outputs.matrix }}
+      entries: ${{ steps.f.outputs.entries }}
+      any: ${{ steps.f.outputs.any }}
+    steps:
+      - id: p
+        uses: denzhel/tfpls/actions/drift-fix@main
+        with:
+          mode: parse
+          workspaces: ${{ inputs.workspaces }}
+          step: ${{ inputs.step }}
+      - if: steps.p.outputs.ok == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { ref: "${{ steps.p.outputs.sha }}", persist-credentials: false }
+      - id: d
+        if: steps.p.outputs.ok == 'true'
+        uses: denzhel/tfpls/actions/detect-workspaces@main
+        with:
+          config: ${{ inputs.config }}
+          name: ${{ steps.p.outputs.names }}
+      - id: f
+        if: steps.p.outputs.ok == 'true'
+        uses: denzhel/tfpls/actions/drift-fix@main
+        with:
+          mode: filter
+          entries: ${{ steps.d.outputs.entries }}
+
+  # one job per workspace; same credentials, policies, locks and reviewed-plan store as every other apply
+  fix:
+    needs: parse
+    if: needs.parse.outputs.ok == 'true' && needs.parse.outputs.any == 'true'
+    environment: ${{ needs.parse.outputs.cmd != 'plan' && inputs.apply_environment || null }}
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: write, issues: write, pull-requests: write, id-token: write, actions: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.max_parallel }}
+      matrix: ${{ fromJSON(needs.parse.outputs.matrix) }}
+    concurrency:
+      group: tfpls-${{ github.repository }}-${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
+      cancel-in-progress: false
+    steps:
+      - uses: denzhel/tfpls/actions/prepare@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
+          ref: ${{ needs.parse.outputs.sha }}
+          tofu_version: ${{ inputs.tofu_version }}
+          role_arn: ${{ vars.TFPLS_ROLE_ARN }}
+          report_pr: ${{ strategy.job-index == 0 && github.event.issue.number || '' }}
+          json: ${{ secrets.TFPLS_ENV_JSON }}
+      # the issue that gets the plan comment: the one the command was written on, else the open `Drift: <workspace>` issue
+      - id: iss
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIVEN: ${{ needs.parse.outputs.issue }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          n="$GIVEN"
+          if [ -z "$n" ]; then
+            n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label tfpls-drift --limit 100 --json number,title 2>/dev/null \
+                  | jq -r --arg t "Drift: $LABEL" '.[] | select(.title == $t) | .number' | head -1 || true)
+          fi
+          echo "number=${n:-}" >> "$GITHUB_OUTPUT"
+      - id: t
+        uses: denzhel/tfpls/actions/tofu@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
+          targets: ${{ needs.parse.outputs.targets }}
+          pr_number: ${{ steps.iss.outputs.number }}
+          apply: ${{ needs.parse.outputs.cmd == 'plan' && 'none' || 'force' }}
+          head_sha: ${{ needs.parse.outputs.sha }}
+          # plan saves the reviewed plan; apply applies ONLY that plan (never re-plans); fix plans and applies in this run
+          plan_mode: ${{ needs.parse.outputs.cmd == 'apply' && 'reviewed_only' || 'fresh' }}
+          save_plan: ${{ needs.parse.outputs.cmd == 'plan' && 'true' || 'false' }}
+          plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
+      - if: always() && needs.parse.outputs.cmd != 'plan'
+        uses: denzhel/tfpls/actions/finish@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
+          label: ${{ matrix.label }}
+          webhook: ${{ secrets[fromJSON(needs.parse.outputs.entries)[matrix.label].notify_secret || 'SLACK_WEBHOOK'] }}
+          template_ref: ${{ github.event.repository.default_branch }}
+          status: ${{ steps.t.outputs.status || 'error' }}
+          summary: ${{ steps.t.outputs.summary }}
+          counts: ${{ steps.t.outputs.counts }}
+          changes: ${{ steps.t.outputs.changes }}
+          changes_more: ${{ steps.t.outputs.changes_more }}
+          duration: ${{ steps.t.outputs.duration }}
+          reviewed: ${{ steps.t.outputs.reviewed }}
+          via: drift-fix
+          audit: ${{ inputs.audit }}

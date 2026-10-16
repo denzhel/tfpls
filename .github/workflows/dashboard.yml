@@ -1,0 +1,65 @@
+# Reusable: build the status dashboard from the data branch.
+# Always: uploaded as the `tfpls-dashboard` artifact (download, open index.html) and shown in the run summary.
+# Optional: pages: true deploys it to GitHub Pages; commit_page: true also stores it at dashboard/index.html on the data branch.
+# Caller needs: on: schedule/workflow_dispatch/workflow_run; permissions: contents: read (write with commit_page);
+#   pages: write and id-token: write with pages: true.
+name: tfpls dashboard
+on:
+  workflow_call:
+    inputs:
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels' }
+      pages: { type: boolean, default: false, description: "deploy to GitHub Pages (private repositories need a paid GitHub plan)" }
+      commit_page: { type: boolean, default: false, description: "store the page at dashboard/index.html on the data branch" }
+
+jobs:
+  build:
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: 10
+    steps:
+      - id: d
+        uses: denzhel/tfpls/actions/dashboard@main
+      - name: Run summary
+        shell: bash
+        run: cat "${{ steps.d.outputs.path }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tfpls-dashboard
+          path: ${{ steps.d.outputs.path }}
+          retention-days: 14
+          overwrite: true
+      - name: Store the page on the data branch
+        if: inputs.commit_page
+        shell: bash
+        env:
+          TOKEN: ${{ github.token }}
+          BRANCH: tfpls-data
+          SRC: ${{ steps.d.outputs.path }}
+        run: |
+          set -uo pipefail
+          d=$(mktemp -d)
+          git clone --quiet --depth 1 --branch "$BRANCH" "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$d" 2>/dev/null \
+            || { echo "::warning::no \`$BRANCH\` branch to store the page on"; exit 0; }
+          mkdir -p "$d/dashboard"; cp "$SRC/index.html" "$d/dashboard/index.html"
+          cd "$d" && git add -A
+          git diff --cached --quiet && exit 0
+          git -c user.name=tfpls -c user.email=tfpls@users.noreply.github.com commit --quiet -m "dashboard: refresh"
+          for _ in 1 2 3; do git push --quiet origin "$BRANCH" && exit 0; git pull --quiet --rebase origin "$BRANCH"; done
+          echo "::warning::could not store the page"
+      - if: inputs.pages
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: ${{ steps.d.outputs.path }}
+
+  deploy:
+    needs: build
+    if: inputs.pages
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: 10
+    # no permissions block here: a reusable workflow cannot ask for more than its caller grants, even in a skipped job,
+    # so callers using `pages: true` grant pages: write and id-token: write themselves
+    environment:
+      name: github-pages
+      url: ${{ steps.p.outputs.page_url }}
+    steps:
+      - id: p
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

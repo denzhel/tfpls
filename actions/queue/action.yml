@@ -1,0 +1,30 @@
+name: queue
+description: First-come-first-served queue per workspace (tickets on the data branch); nothing is silently cancelled
+inputs:
+  mode:
+    required: true
+    description: "enter (wait for your turn) | leave (give the turn up; run it with if: always())"
+  name: { required: true, description: "workspace name (the queue key)" }
+  label: { default: "" }
+  pr_number: { default: "", description: "when set, the PR gets a comment with the queue position while waiting" }
+  branch: { default: tfpls-data }
+  timeout_minutes: { default: "50" }
+  github_token: { default: "${{ github.token }}" }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        NAME: ${{ inputs.name }}
+        LABEL: ${{ inputs.label }}
+        PR: ${{ inputs.pr_number }}
+        BRANCH: ${{ inputs.branch }}
+        TIMEOUT: ${{ inputs.timeout_minutes }}
+        TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        RUN_ATTEMPT: ${{ github.run_attempt }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: ${{ github.action_path }}/queue.sh

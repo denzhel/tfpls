@@ -1,0 +1,55 @@
+# CI for the tfpls repo itself, on GitHub-hosted runners.
+# Needs actionlint (installed below, pinned and checksum-verified), shellcheck, yq, jq and python3 (on the runner image).
+# Lints the workflows and scripts, runs the offline test suite.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: install actionlint (pinned, checksum verified)
+        run: |
+          v=1.7.12; sum=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          curl -fsSL -o /tmp/actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${v}/actionlint_${v}_linux_amd64.tar.gz"
+          echo "$sum  /tmp/actionlint.tgz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tgz -C /tmp actionlint && sudo install /tmp/actionlint /usr/local/bin/actionlint
+      - name: actionlint
+        run: |
+          actionlint -color
+      - name: shellcheck
+        run: shellcheck -S warning actions/*/*.sh tools/* tests/*.sh
+      - name: yaml parses
+        run: |
+          for f in .github/workflows/*.yml actions/*/action.yml examples/.tfpls.yml .github/ISSUE_TEMPLATE/*.yml; do
+            yq '.' "$f" > /dev/null || { echo "::error file=$f::not valid YAML"; exit 1; }
+          done
+
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # real downloads on the hosted Linux runner: the install path used by the shared workflows (the policy tests need conftest)
+      - name: install OpenTofu and conftest with the setup action
+        uses: ./actions/setup
+      - name: installed versions match the defaults
+        run: |
+          tofu version | head -1
+          conftest --version | head -1
+          tofu version | head -1 | grep -q "v1.10.6"
+          conftest --version | head -1 | grep -q "0.56.0"
+      - name: offline tests
+        run: bash tests/run-all.sh

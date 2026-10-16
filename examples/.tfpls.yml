@@ -1,0 +1,23 @@
+defaults:
+  auto_apply: never
+  create_workspace: true      # first run only: lets the first plan create a missing tofu workspace; leave it out afterwards
+stacks:
+  - name: terraform
+    dir: .
+    workspaces_glob: "workspaces/*"           # one directory per workspace, like the real repo
+    workspace_paths: ["workspaces/{workspace}/"]
+    triggers:                                 # a change to dev-network also plans the dev apps
+      "dev-network": ["dev-app-*"]
+    ignore: ["**/*.md", ".github/**", "docs/**", "policies/**"]
+    overrides:
+      "dev-*":  { auto_apply: always }
+      "stg-*":  { auto_apply: additive_only }
+      "prod-*": { auto_apply: never, policy_dir: policies }
+      "dr-*":   { auto_apply: never, policy_dir: policies, after: ["prod-*"] }   # apply DR only after prod succeeded
+# Production drift is fixed through a pull request only (stack-level, or inside an override such as "prod-*"):
+#     drift_fix: false
+# Merge-time strictness, only with auto_apply: always or additive_only: block instead of re-planning when no reviewed plan matches
+#     require_reviewed_plan: true
+# State locks while planning (per stack or override):
+#     lock_timeout: 5m       # wait up to 5 minutes for a held lock (the default is 2m)
+#     plan_lock: false       # report-only plans use -lock=false (may read slightly stale state)

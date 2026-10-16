@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infrastructure status</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1b1f24;--muted:#626b76;--line:#e1e4e8;--ok:#1a7f37;--okbg:#dafbe1;--warn:#9a6700;--warnbg:#fff1c2;--bad:#cf222e;--badbg:#ffebe9;--link:#0969da}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0d1117;--card:#161b22;--text:#e6edf3;--muted:#8b949e;--line:#30363d;--ok:#3fb950;--okbg:#12261a;--warn:#d29922;--warnbg:#2d2410;--bad:#f85149;--badbg:#2d1214;--link:#58a6ff}}
+:root[data-theme=dark]{--bg:#0d1117;--card:#161b22;--text:#e6edf3;--muted:#8b949e;--line:#30363d;--ok:#3fb950;--okbg:#12261a;--warn:#d29922;--warnbg:#2d2410;--bad:#f85149;--badbg:#2d1214;--link:#58a6ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;margin-bottom:16px}
+h1{font-size:20px;margin:0}.muted{color:var(--muted)}a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:96px}
+.chip b{display:block;font-size:20px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+input,select,button{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 10px;font:inherit}
+input{flex:1;min-width:160px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:24px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.badge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap}
+.in-sync{background:var(--okbg);color:var(--ok)}.drift{background:var(--warnbg);color:var(--warn)}.error{background:var(--badbg);color:var(--bad)}.unknown{background:var(--line);color:var(--muted)}
+h2{font-size:15px;margin:0 0 8px}
+.feed{list-style:none;margin:0;padding:0}.feed li{padding:9px 12px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 10px}.feed li:last-child{border-bottom:0}
+.empty{padding:18px 12px;color:var(--muted)}
+@media (max-width:700px){.hide-sm{display:none}th,td{padding:8px}}
+</style>
+</head>
+<body>
+<main>
+<header><h1 id="title">Infrastructure status</h1><span class="muted" id="gen"></span><button id="theme" type="button" title="Toggle light/dark">◐</button></header>
+<div class="chips" id="chips"></div>
+<div class="toolbar">
+<input id="q" type="search" placeholder="Filter workspaces" aria-label="Filter workspaces">
+<select id="status" aria-label="Status"><option value="">All statuses</option><option value="in-sync">In sync</option><option value="drift">Drift</option><option value="error">Error</option><option value="unknown">Unknown</option></select>
+<select id="stack" aria-label="Stack"><option value="">All stacks</option></select>
+</div>
+<div class="card"><table><thead><tr><th data-k="name">Workspace</th><th data-k="state">Status</th><th data-k="checked" class="hide-sm">Checked</th><th data-k="summary">Pending</th><th data-k="applied" class="hide-sm">Last apply</th></tr></thead><tbody id="rows"></tbody></table><div class="empty" id="none" hidden>No workspace matches.</div></div>
+<h2>Last 30 days</h2>
+<div class="card" id="ins" style="padding:12px"></div>
+<h2>Recent activity</h2>
+<div class="card"><ul class="feed" id="feed"></ul><div class="empty" id="nofeed" hidden>No audit events yet. Enable <code>audit: true</code> in the workflows.</div></div>
+</main>
+<script id="data" type="application/json">__TFPLS_DATA__</script>
+<script>
+(function(){
+var D=JSON.parse(document.getElementById('data').textContent);
+var $=function(i){return document.getElementById(i)};
+function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+function safeUrl(u){return typeof u==='string'&&/^https:\/\//.test(u)?u:null}
+function link(text,url){var u=safeUrl(url);if(!u)return document.createTextNode(text);var a=el('a',null,text);a.href=u;a.rel='noopener noreferrer';return a}
+function ago(ts){if(!ts)return '–';var t=Date.parse(ts);if(isNaN(t))return ts;var m=Math.max(0,Math.round((Date.now()-t)/60000));
+ if(m<1)return 'just now';if(m<60)return m+' min ago';var h=Math.round(m/60);if(h<48)return h+' h ago';return Math.round(h/24)+' d ago'}
+function badge(s){var b=el('span','badge '+({'in-sync':'in-sync',drift:'drift',error:'error'}[s]||'unknown'),({'in-sync':'in sync'}[s])||s||'unknown');return b}
+$('title').textContent=(D.repo||'Infrastructure')+' · infrastructure status';
+document.title=$('title').textContent;
+$('gen').textContent='updated '+ago(D.generated)+(D.generated?' ('+D.generated+')':'');
+var ws=D.workspaces||[];
+var stacks={};ws.forEach(function(w){stacks[w.stack]=1});
+Object.keys(stacks).sort().forEach(function(s){var o=el('option',null,s);o.value=s;$('stack').appendChild(o)});
+var counts={'in-sync':0,drift:0,error:0,unknown:0};
+ws.forEach(function(w){counts[w.state]=(counts[w.state]||0)+1});
+[['Workspaces',ws.length],['In sync',counts['in-sync']],['Drift',counts.drift],['Error',counts.error]].forEach(function(c){var d=el('div','chip');d.appendChild(el('b',null,String(c[1])));d.appendChild(el('span','muted',c[0]));$('chips').appendChild(d)});
+var sortKey='state',sortDir=1,rank={error:0,drift:1,unknown:2,'in-sync':3};
+function val(w,k){if(k==='state')return rank[w.state]==null?2:rank[w.state];if(k==='applied')return w.last_apply?w.last_apply.ts:'';return (w[k]||'')+''}
+function render(){
+ var q=$('q').value.toLowerCase(),st=$('status').value,sk=$('stack').value;
+ var list=ws.filter(function(w){return (!st||w.state===st)&&(!sk||w.stack===sk)&&(!q||(w.name+' '+(w.summary||'')).toLowerCase().indexOf(q)>=0)});
+ list.sort(function(a,b){var x=val(a,sortKey),y=val(b,sortKey);return (x<y?-1:x>y?1:(a.name<b.name?-1:1))*sortDir});
+ var tb=$('rows');tb.textContent='';
+ list.forEach(function(w){var tr=el('tr');
+  var c1=el('td');c1.appendChild(el('strong',null,w.name));tr.appendChild(c1);
+  var c2=el('td');c2.appendChild(badge(w.state));if(w.issue&&w.issue_url){c2.appendChild(document.createTextNode(' '));c2.appendChild(link('#'+w.issue,w.issue_url))}tr.appendChild(c2);
+  var c3=el('td','muted hide-sm',ago(w.checked));c3.title=w.checked||'';tr.appendChild(c3);
+  tr.appendChild(el('td',null,w.state==='in-sync'?'–':(w.summary||'')));
+  var c5=el('td','muted hide-sm');if(w.last_apply){c5.appendChild(link(ago(w.last_apply.ts),w.last_apply.run));c5.appendChild(document.createTextNode(' · '+(w.last_apply.status||'')+(w.last_apply.actor?' · '+w.last_apply.actor:'')))}else c5.textContent='–';
+  tr.appendChild(c5);tb.appendChild(tr)});
+ $('none').hidden=list.length>0}
+['q','status','stack'].forEach(function(i){$(i).addEventListener('input',render)});
+document.querySelectorAll('th[data-k]').forEach(function(th){th.addEventListener('click',function(){var k=th.getAttribute('data-k');if(sortKey===k)sortDir=-sortDir;else{sortKey=k;sortDir=1}render()})});
+render();
+var ev=D.events||[],fe=$('feed');
+ev.forEach(function(e){var li=el('li');li.appendChild(el('span','muted',ago(e.ts)));li.appendChild(badge(e.status==='applied'||e.status==='unlocked'||e.status==='no-changes'?'in-sync':(e.status==='error'||e.status==='refused'||e.status==='policy-failed'?'error':'drift')));
+ var t=(e.kind||'')+' · '+(e.workspace||'');li.appendChild(link(t,e.run));
+ var meta=[];if(e.status)meta.push(e.status);if(e.actor)meta.push('by '+e.actor);if(e.reviewed)meta.push('reviewed plan');
+ if(e.counts&&typeof e.counts==='object')meta.push('+'+(e.counts.add||0)+' ~'+(e.counts.change||0)+' -'+(e.counts.destroy||0));
+ li.appendChild(el('span','muted',meta.join(' · ')));fe.appendChild(li)});
+$('nofeed').hidden=ev.length>0;
+(function(){var I=D.insights||{},box=$('ins');function line(label,val){var p=el('div');p.appendChild(el('span','muted',label+': '));p.appendChild(el('strong',null,String(val)));box.appendChild(p)}
+ line('Applies',(I.applies||0)+' ('+(I.applied||0)+' applied, '+(I.failed||0)+' failed)');
+ line('Success rate',I.success_rate==null?'–':I.success_rate+'%');
+ line('Applied from a reviewed plan',I.reviewed_share==null?'–':I.reviewed_share+'%');
+ line('Average apply time',I.avg_apply_seconds==null?'–':I.avg_apply_seconds+' s'+(I.slowest_apply?' (slowest: '+I.slowest_apply.workspace+', '+I.slowest_apply.seconds+' s)':''));
+ line('Locks released',I.locks_released||0);
+ if(I.busiest&&I.busiest.length)line('Busiest',I.busiest.map(function(b){return b.workspace+' ('+b.applies+')'}).join(', '));
+ var u=I.unused||[];line('In sync with no apply for '+(I.unused_days||90)+' days (possibly unused)',u.length?u.map(function(x){return x.workspace}).join(', '):'none')})();
+var root=document.documentElement;try{var th=localStorage.getItem('tfpls-theme');if(th)root.setAttribute('data-theme',th)}catch(e){}
+$('theme').addEventListener('click',function(){var dark=root.getAttribute('data-theme')?root.getAttribute('data-theme')==='dark':matchMedia('(prefers-color-scheme:dark)').matches;var n=dark?'light':'dark';root.setAttribute('data-theme',n);try{localStorage.setItem('tfpls-theme',n)}catch(e){}});
+})();
+</script>
+</body>
+</html>

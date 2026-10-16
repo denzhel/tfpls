@@ -1,0 +1,59 @@
+name: drift fix
+description: Parse and guard a drift fix (a /tofu plan|apply|fix comment on a Drift issue, or a manual run), and drop the workspaces that forbid it
+inputs:
+  mode:
+    description: "parse | filter"
+    default: parse
+  entries:
+    description: "filter: the entries output of detect-workspaces"
+    default: ""
+  workspaces:
+    description: "manual run: workspace names"
+    default: ""
+  step:
+    description: "manual run: plan | apply | fix"
+    default: fix
+  github_token:
+    default: ${{ github.token }}
+outputs:
+  ok: { value: "${{ steps.parse.outputs.ok }}" }
+  cmd: { value: "${{ steps.parse.outputs.cmd }}" }
+  names: { value: "${{ steps.parse.outputs.names }}" }
+  targets: { value: "${{ steps.parse.outputs.targets }}" }
+  sha: { value: "${{ steps.parse.outputs.sha }}" }
+  issue: { value: "${{ steps.parse.outputs.issue }}" }
+  matrix: { value: "${{ steps.filter.outputs.matrix }}" }
+  entries: { value: "${{ steps.filter.outputs.entries }}" }
+  any: { value: "${{ steps.filter.outputs.any }}" }
+runs:
+  using: composite
+  steps:
+    - id: parse
+      if: inputs.mode == 'parse'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        EVENT: ${{ github.event_name }}
+        BODY: ${{ github.event.comment.body }}
+        ACTOR: ${{ github.event.comment.user.login || github.actor }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        ISSUE_TITLE: ${{ github.event.issue.title }}
+        ISSUE_STATE: ${{ github.event.issue.state }}
+        ISSUE_USER_TYPE: ${{ github.event.issue.user.type }}
+        ISSUE_LABELS: ${{ toJSON(github.event.issue.labels.*.name) }}
+        IS_PR: ${{ github.event.issue.pull_request && 'true' || 'false' }}
+        COMMENT_ID: ${{ github.event.comment.id }}
+        IN_WORKSPACES: ${{ inputs.workspaces }}
+        IN_STEP: ${{ inputs.step }}
+        REPO: ${{ github.repository }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: ${{ github.action_path }}/parse.sh
+    - id: filter
+      if: inputs.mode == 'filter'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        ENTRIES: ${{ inputs.entries }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+        REPO: ${{ github.repository }}
+      run: ${{ github.action_path }}/filter.sh

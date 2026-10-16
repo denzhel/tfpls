@@ -1,0 +1,113 @@
+# Reusable: after merge, plan + apply workspaces per their auto_apply setting.
+# Caller needs: on: push (default branch); permissions: contents: write (audit), id-token: write,
+#   actions: read (finds the reviewed plan artifact), pull-requests: read
+# Per-workspace runs are serialized (concurrency group, never cancelled) so applies queue FIFO-ish
+# (GitHub keeps only one pending run per group; see docs/reference.md "Concurrency").
+name: tfpls apply
+on:
+  workflow_call:
+    inputs:
+      config: { type: string, default: .tfpls.yml }
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","dedicated-terraform"]' }
+      audit: { type: boolean, default: true, description: "append an audit event per run to the data branch (the caller needs contents: write)" }
+      queue: { type: boolean, default: false, description: "first-come-first-served queue per workspace instead of GitHub's concurrency group, which cancels the middle run (tickets on the data branch; the caller needs contents: write)" }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.10.6" }
+      max_parallel: { type: number, default: 4, description: "how many workspaces are planned/applied at the same time" }
+      timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
+      apply_environment: { type: string, default: "", description: "GitHub Environment used by apply-capable jobs (holds the apply credentials; can require reviewers)" }
+    secrets:
+      TFPLS_ENV_JSON: { required: false }
+      SLACK_WEBHOOK: { required: false }
+      PLAN_ENCRYPTION_KEY: { required: false, description: 'decrypts saved plans; must match the key used by plan.yml' }
+
+jobs:
+  detect:
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: read, pull-requests: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.d.outputs.matrix }}
+      any: ${{ steps.d.outputs.any }}
+      entries: ${{ steps.d.outputs.entries }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0, persist-credentials: false }
+      # the PR this commit was merged from: its head SHA keys the reviewed plan (empty for direct pushes)
+      - id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[] | select(.merged_at != null)] | .[0].head.sha // ""' 2>/dev/null || true)
+          echo "head_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "merged PR head SHA: ${sha:-<none, direct push>}"
+      - id: d
+        uses: denzhel/tfpls/actions/detect-workspaces@main
+        with:
+          config: ${{ inputs.config }}
+          mode: changed
+          base_ref: ${{ github.event.before }}
+
+  apply:
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    environment: ${{ inputs.apply_environment || null }}
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: write, pull-requests: read, id-token: write, actions: read }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.max_parallel }}
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    concurrency:
+      # with `queue` every run gets its own group, so GitHub never cancels a pending run; the queue action orders them
+      group: tfpls-${{ github.repository }}-${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}${{ inputs.queue && format('-{0}', github.run_id) || '' }}
+      cancel-in-progress: false
+    steps:
+      - if: inputs.queue
+        uses: denzhel/tfpls/actions/queue@main
+        with:
+          mode: enter
+          name: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}
+          label: ${{ matrix.label }}
+          timeout_minutes: ${{ inputs.timeout_minutes }}
+      # `after:` in the config: wait for the listed workspaces of this run and stop if one of them failed
+      - uses: denzhel/tfpls/actions/wait-for@main
+        with:
+          jobs: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].wait_for }}
+          timeout_minutes: ${{ inputs.timeout_minutes }}
+      - uses: denzhel/tfpls/actions/prepare@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          tofu_version: ${{ inputs.tofu_version }}
+          role_arn: ${{ vars.TFPLS_ROLE_ARN }}
+          json: ${{ secrets.TFPLS_ENV_JSON }}
+      - id: t
+        uses: denzhel/tfpls/actions/tofu@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          apply: auto
+          head_sha: ${{ needs.detect.outputs.head_sha }}
+          # apply the reviewed PR plan when it is still valid; require_reviewed_plan: true blocks instead of re-planning
+          plan_mode: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].require_reviewed_plan == 'true' && 'reviewed_only' || 'reviewed' }}
+          plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
+      - if: always()
+        uses: denzhel/tfpls/actions/finish@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          label: ${{ matrix.label }}
+          webhook: ${{ secrets[fromJSON(needs.detect.outputs.entries)[matrix.label].notify_secret || 'SLACK_WEBHOOK'] }}
+          status: ${{ steps.t.outputs.status || 'error' }}
+          summary: ${{ steps.t.outputs.summary }}
+          counts: ${{ steps.t.outputs.counts }}
+          changes: ${{ steps.t.outputs.changes }}
+          changes_more: ${{ steps.t.outputs.changes_more }}
+          duration: ${{ steps.t.outputs.duration }}
+          reviewed: ${{ steps.t.outputs.reviewed }}
+          via: auto-apply
+          audit: ${{ inputs.audit }}
+          queue: ${{ inputs.queue }}

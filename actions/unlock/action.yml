@@ -1,0 +1,61 @@
+name: tofu unlock
+description: Release a stuck state lock on one workspace (finds the lock ID itself; refuses if a run is active or the lock is fresh)
+inputs:
+  name: { default: "" }
+  label: { default: "" }
+  dir: { default: "" }
+  workspace: { default: "" }
+  pr_number: { default: "" }
+  sweep_entries:
+    description: "the `entries` output of detect-workspaces: show the lock of every one of them, one after the other (the manual `locks` task; name, dir and workspace are then not needed)"
+    default: ""
+  release:
+    description: "with sweep_entries: names or labels of the workspaces whose lock is released (under the rules of /tofu unlock); empty = only report"
+    default: ""
+  audit: { default: "false", description: "with sweep_entries: write an audit event for every released lock" }
+  audit_branch: { default: tfpls-data }
+  timeout_minutes: { default: "10", description: "sweep: time limit of the check of one workspace" }
+  github_token: { default: "${{ github.token }}" }
+outputs:
+  result:
+    description: "unlocked | not-locked | kept | refused"
+    value: ${{ steps.u.outputs.result }}
+  released:
+    description: "sweep: how many locks were released"
+    value: ${{ steps.u.outputs.released }}
+  locked:
+    description: "sweep: how many workspaces are locked"
+    value: ${{ steps.u.outputs.locked }}
+  lock_id:
+    description: "ID of the lock that was found (empty when the workspace was not locked)"
+    value: ${{ steps.u.outputs.lock_id }}
+runs:
+  using: composite
+  steps:
+    - id: u
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        LABEL: ${{ inputs.label }}
+        DIR: ${{ inputs.dir }}
+        WS: ${{ inputs.workspace }}
+        PR: ${{ inputs.pr_number }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        REPO_ROOT: ${{ github.workspace }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        ENTRIES: ${{ inputs.sweep_entries }}
+        RELEASE: ${{ inputs.release }}
+        AUDIT: ${{ inputs.audit }}
+        BRANCH: ${{ inputs.audit_branch }}
+        REPO: ${{ github.repository }}
+        ACTOR: ${{ github.actor }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+      run: if [ -n "$ENTRIES" ]; then ${{ github.action_path }}/sweep.sh; else ${{ github.action_path }}/unlock.sh; fi
+    - name: Remove tofu working files from the runner workspace
+      if: always()
+      shell: bash
+      env:
+        DIR: ${{ inputs.dir }}
+        REPO_ROOT: ${{ github.workspace }}
+      run: |
+        if [ -n "$DIR" ] && [ -d "$REPO_ROOT/$DIR" ]; then (cd "$REPO_ROOT/$DIR" && rm -rf init.txt unlock.txt .terraform); fi

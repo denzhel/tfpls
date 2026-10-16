@@ -1,0 +1,22 @@
+name: codeowners
+description: Require an approval from a CODEOWNER of every workspace an apply touches (CODEOWNERS is read from the base branch)
+inputs:
+  entries: { required: true, description: "entries output of detect-workspaces" }
+  sha: { required: true, description: "head commit the approvals must be for" }
+  base: { required: true, description: "base commit/branch to read CODEOWNERS from" }
+  pr_number: { required: true }
+  comment_id: { default: "" }
+  github_token: { default: "${{ github.token }}" }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR: ${{ inputs.pr_number }}
+        COMMENT_ID: ${{ inputs.comment_id }}
+        SHA: ${{ inputs.sha }}
+        BASE: ${{ inputs.base }}
+        ENTRIES: ${{ inputs.entries }}
+        REPO: ${{ github.repository }}
+      run: ${{ github.action_path }}/enforce.sh

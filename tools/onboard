@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+# Onboard a repository: scan it, write the caller workflow (and a config only when your layout needs one), say what is left.
+# No network, no side effects other than those files.
+#   tools/onboard [--force] [--create-workspaces] [--ref v0] [--slug owner/tfpls] [--runs-on ubuntu-latest] [dir]
+# --create-workspaces: the tofu workspaces do not exist in your state yet: writes create_workspace: true (first run only).
+# # ubuntu-slim is cheaper but cuts every job after 15 minutes: only for workspaces that apply quickly.
+set -euo pipefail
+
+usage() { cat <<'USAGE'
+Onboard a repository: scan it, write the caller workflow (and a config only when your layout needs one), say what is left.
+No network, no side effects other than those files.
+  tools/onboard [--force] [--create-workspaces] [--ref v0] [--slug owner/tfpls] [--runs-on ubuntu-latest] [dir]
+  one-liner with flags: ... | bash -s -- --create-workspaces
+--create-workspaces: the tofu workspaces do not exist in your state yet: writes create_workspace: true (first run only).
+--runs-on ubuntu-slim is cheaper but cuts every job after 15 minutes: only for workspaces that apply quickly.
+USAGE
+}
+force=false; newws=false; ref=v0; slug=denzhel/tfpls; runs_on=ubuntu-latest
+while [ $# -gt 0 ]; do
+  case $1 in
+    --force) force=true; shift ;;
+    --create-workspaces) newws=true; shift ;;
+    --ref) ref=$2; shift 2 ;;
+    --slug) slug=$2; shift 2 ;;
+    --runs-on) runs_on=$2; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+dir=${1:-.}
+[ -d "$dir" ] || { echo "no such directory: $dir" >&2; exit 1; }
+cd "$dir"
+
+# colors only on a terminal (NO_COLOR switches them off, FORCE_COLOR=1 on)
+if { [ -t 1 ] || [ "${FORCE_COLOR:-}" = 1 ]; } && [ -z "${NO_COLOR:-}" ]; then
+  B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; C=$'\033[36m'; M=$'\033[35m'; D=$'\033[2m'; R=$'\033[0m'
+else B=""; G=""; Y=""; C=""; M=""; D=""; R=""; fi
+ok()   { printf '  %s✔%s %s\n' "$G" "$R" "$1"; }
+warn() { printf '  %s!%s %s\n' "$Y" "$R" "$1"; }
+info() { printf '  %s•%s %s\n' "$C" "$R" "$1"; }
+head_() { printf '\n%s%s%s\n' "$B" "$1" "$R"; }
+
+docs="https://github.com/$slug/blob/$ref/docs"
+wf=.github/workflows/tofu.yml
+if [ -e "$wf" ] && [ "$force" = false ]; then
+  printf '%s%s exists.%s Use --force to overwrite it (the config .tfpls.yml is never overwritten).\n' "$Y" "$wf" "$R" >&2
+  exit 1
+fi
+
+printf '\n%s%s🚀 tfpls onboarding%s\n%s   OpenTofu on GitHub Actions: plan on pull requests, apply by comment, drift checks.%s\n' "$B" "$M" "$R" "$D" "$R"
+
+# ---- what is here
+head_ "🔎 Looking around"
+branch=""
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  branch=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)
+  # no origin/HEAD (a fresh clone of an empty repository, a repository created here): the usual names first, because
+  # onboarding often runs on a feature branch and the push trigger must name the DEFAULT branch
+  if [ -z "$branch" ]; then
+    for cand in main master; do
+      if git show-ref --quiet "refs/remotes/origin/$cand" || git show-ref --quiet "refs/heads/$cand"; then branch=$cand; break; fi
+    done
+  fi
+  [ -n "$branch" ] || branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+else warn "this is not a git repository: the workflow assumes the default branch is main"; fi
+[ -n "$branch" ] || branch=main
+case $branch in *[!A-Za-z0-9._/-]*) branch=main;; esac
+for old in .github/workflows/*.yml .github/workflows/*.yaml; do
+  [ -f "$old" ] && [ "$old" != "$wf" ] && grep -qiE 'tofu|terraform' "$old" && warn "$old looks like another tofu/terraform workflow: two pipelines on one repository will both comment and apply"
+done
+
+safe() { case $1 in ''|*[!A-Za-z0-9._-]*|.*) return 1;; esac; return 0; }
+root_tf=false
+ls ./*.tf >/dev/null 2>&1 && root_tf=true
+
+# layout 1: one folder per workspace under workspaces/ (the default, no config needed)
+found=()
+if [ -d workspaces ]; then
+  for d in workspaces/*/; do
+    [ -d "$d" ] || continue; n=$(basename "$d")
+    if safe "$n"; then found+=("$n"); else warn "workspaces/$n: the name has characters other than letters, digits . _ - and is skipped"; fi
+  done
+fi
+# layout 2: one root module and one var file per workspace
+varfiles=(); vardir=""
+if [ "${#found[@]}" -eq 0 ] && $root_tf; then
+  for cand in vars env envs environments tfvars .; do
+    [ -d "$cand" ] || continue
+    for f in "$cand"/*.tfvars; do
+      [ -f "$f" ] || continue; n=$(basename "$f" .tfvars)
+      [ "$n" = terraform ] && continue; case $n in *.auto) continue;; esac
+      safe "$n" && varfiles+=("$n")
+    done
+    if [ "${#varfiles[@]}" -gt 0 ]; then vardir=$cand; break; fi
+  done
+fi
+# layout 3: separate root modules (a backend block in each directory), the tofu workspace is `default`
+envdirs=()
+if [ "${#found[@]}" -eq 0 ] && [ "${#varfiles[@]}" -eq 0 ]; then
+  while IFS= read -r f; do
+    d=$(dirname "$f"); d=${d#./}
+    [ "$d" = . ] && continue
+    case $d in workspaces/*|modules/*|*/modules/*|.terraform/*|*/.terraform/*) continue;; esac
+    case " ${envdirs[*]-} " in *" $d "*) continue;; esac
+    if safe "${d//\//-}"; then envdirs+=("$d"); fi
+  done < <(find . -mindepth 2 -maxdepth 4 -name '*.tf' -not -path './.git/*' -not -path '*/.terraform/*' -print0 2>/dev/null \
+            | xargs -0 grep -lE '^[[:space:]]*backend[[:space:]]+"' 2>/dev/null | sort)
+fi
+
+# relative module sources of one directory -> repo-relative paths (never outside the repository)
+module_watch() {
+  local d=$1 f src p out=() seg parts
+  for f in "$d"/*.tf; do
+    [ -f "$f" ] || continue
+    while IFS= read -r src; do
+      p="$d/$src"; parts=(); IFS=/ read -ra segs <<<"$p"
+      for seg in "${segs[@]}"; do
+        case $seg in ''|.) ;; ..) [ "${#parts[@]}" -gt 0 ] || { parts=(); break; }; unset 'parts[${#parts[@]}-1]'; parts=("${parts[@]+"${parts[@]}"}");; *) parts+=("$seg");; esac
+      done
+      [ "${#parts[@]}" -gt 0 ] || continue
+      p=$(IFS=/; echo "${parts[*]}")
+      case $p in "$d"|"$d"/*|*[!A-Za-z0-9._/-]*) continue;; esac
+      case " ${out[*]-} " in *" $p "*) ;; *) out+=("$p");; esac
+    done < <(sed -nE 's/^[[:space:]]*source[[:space:]]*=[[:space:]]*"(\.\.?\/[^"]*)".*/\1/p' "$f")
+  done
+  echo "${out[*]-}"
+}
+
+layout=none
+if [ "${#found[@]}" -gt 0 ]; then layout=folders; ok "${#found[@]} workspace(s) in workspaces/: ${B}${found[*]}${R}"; info "${D}the folder names are the tofu workspaces; tofu runs in the repository root, so your root module must load what is in them${R}"
+elif [ "${#varfiles[@]}" -gt 0 ]; then layout=varfile; ok "one root module with a var file per workspace in ${vardir}/: ${B}${varfiles[*]}${R}"
+elif [ "${#envdirs[@]}" -gt 0 ]; then layout=envs; ok "${#envdirs[@]} separate root module(s) with a backend: ${B}${envdirs[*]}${R}"
+else warn "no layout found (no workspaces/<name>/ folders, no var files next to a root module, no directories with a backend block)"; fi
+
+if $root_tf || [ "$layout" = envs ]; then
+  tf_files=$(find . -name '*.tf' -not -path './.terraform/*' -not -path '*/.terraform/*' -not -path './.git/*' 2>/dev/null | head -200)
+else tf_files=""; fi
+if [ -z "$tf_files" ]; then warn "no .tf files here: run this in the root of your repository"
+else
+  # shellcheck disable=SC2086
+  if grep -qs 'backend "s3"' $tf_files; then ok "S3 backend found"; else warn "no backend \"s3\" block: state must be in S3 with native locking ($docs/backends.md)"; fi
+  # shellcheck disable=SC2086
+  if grep -qs '^[[:space:]]*profile[[:space:]]*=' $tf_files; then warn "a profile = \"...\" setting was found: it belongs to your laptop; in CI the OIDC role is used, so remove it from the backend and provider blocks (or set it from a variable)"; fi
+  # shellcheck disable=SC2086
+  if grep -qs 'backend "s3"' $tf_files && ! grep -qs '^[[:space:]]*region[[:space:]]*=' $tf_files; then warn "no region = ... in the backend or provider blocks: set it there, CI has no AWS_REGION unless your role or credentials map provides one"; fi
+  # shellcheck disable=SC2086
+  if grep -qs 'use_lockfile' $tf_files; then ok "native state locking (use_lockfile) found"; else warn "no use_lockfile = true: S3 native locking is the supported way to lock state ($docs/backends.md)"; fi
+fi
+pinned=""
+for f in .opentofu-version .tofu-version .terraform-version; do [ -s "$f" ] && { pinned="$f ($(head -n1 "$f" | tr -d 'v \r'))"; break; }; done
+if [ -n "$pinned" ]; then ok "OpenTofu version from $pinned"
+else info "OpenTofu version is not pinned: 1.10.6 will be used (add a .opentofu-version file to choose)"; fi
+
+# ---- the repository on GitHub (for the trust policy), read from the remote with a strict pattern
+owner=""; repo=""
+rem=$(git remote get-url origin 2>/dev/null || true)
+if [[ $rem =~ ^(https://([^@/]+@)?github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)$ ]]; then
+  owner=${BASH_REMATCH[3]}; repo=${BASH_REMATCH[4]}; repo=${repo%.git}
+  safe "$repo" || { owner=""; repo=""; }
+fi
+
+# ---- write the files
+head_ "✍️  Writing"
+mkdir -p .github/workflows
+cat > "$wf" <<YML
+name: tofu
+on:
+  pull_request:
+  issue_comment: { types: [created] }
+  push: { branches: [${branch}] }
+  schedule: [{ cron: "17 5 * * *" }]
+  workflow_dispatch:
+    inputs:
+      task:
+        description: What to run
+        type: choice
+        options: [drift, locks, dashboard, fix]
+      workspaces: { description: "fix: workspace names to fix (a drifted workspace); locks: workspace names whose lock is released", type: string }
+      step: { description: "fix: plan, apply or fix (plan and apply in one run)", type: choice, options: [fix, plan, apply] }
+permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }
+jobs:
+  tofu:
+    uses: ${slug}/.github/workflows/tofu.yml@${ref}
+YML
+if [ "$runs_on" != ubuntu-latest ]; then printf '    with: { runs_on: %s }\n' "$runs_on" >> "$wf"; fi
+printf '    secrets: inherit\n' >> "$wf"
+ok "$wf ${D}(runs on ${runs_on})${R}"
+
+cfg_active=false
+if [ -e .tfpls.yml ]; then
+  info ".tfpls.yml already exists: left as it is"
+elif [ "$layout" = folders ] && ! $newws; then
+  info "no config file needed for workspaces/<name>/ folders. Settings later, for example in .tfpls.yml:  overrides: { \"prod*\": { drift_fix: false } }"
+else
+  {
+    echo "# tfpls config: https://github.com/${slug}"
+    case $layout in
+      folders)
+        echo "# Workspaces: one folder each under workspaces/ (${found[*]}); new folders are picked up automatically."
+        ;;
+      varfile)
+        echo "# One root module, one var file per workspace (${vardir}/<workspace>.tfvars)."
+        echo "stacks:"
+        echo "  - name: app"
+        echo "    dir: ."
+        printf '    workspaces: [%s]\n' "$(printf '%s, ' "${varfiles[@]}" | sed 's/, $//')"
+        echo "    var_file: \"${vardir}/{workspace}.tfvars\""
+        echo "    workspace_paths: [\"${vardir}/{workspace}.tfvars\"]   # a change to one var file plans only that workspace"
+        cfg_active=true
+        ;;
+      envs)
+        echo "# Separate root modules, one directory each; the tofu workspace is default. watch: modules a stack uses."
+        echo "stacks:"
+        for d in "${envdirs[@]}"; do
+          w=$(module_watch "$d"); n=${d//\//-}
+          if [ -n "$w" ]; then printf '  - { name: %s, dir: %s, workspaces: [default], watch: [%s] }\n' "$n" "$d" "$(echo "$w" | sed 's/ /, /g')"
+          else printf '  - { name: %s, dir: %s, workspaces: [default] }\n' "$n" "$d"; fi
+        done
+        cfg_active=true
+        ;;
+      *)
+        echo "# Nothing found to run. Describe your layout, for example:"
+        echo "# stacks:"
+        echo "#   - { name: dev, dir: envs/dev, workspaces: [default], watch: [modules] }"
+        ;;
+    esac
+    if $newws; then
+      echo "defaults:"
+      echo "  create_workspace: true       # first run only: remove after the first apply, a typo must not create new state"
+      cfg_active=true
+    fi
+    echo "# Examples (settings match a workspace name or a stack name, * allowed):"
+    echo "# overrides:"
+    echo "#   \"prod*\": { drift_fix: false }   # production drift is fixed through a pull request only"
+    echo "#   \"dev*\":  { auto_apply: always }"
+  } > .tfpls.yml
+  if $cfg_active; then ok ".tfpls.yml ${D}(describes your layout)${R}"
+  else warn ".tfpls.yml has only comments: ${B}describe your layout${R} with a stacks: block, otherwise the pipeline finds nothing to run"; fi
+fi
+
+# ---- what is left
+head_ "👉 What's left (in this order)"
+printf '  %s1.%s One IAM role for plan and apply (OIDC, no stored keys), then: %sgh variable set TFPLS_ROLE_ARN --body arn:aws:iam::<account>:role/<role>%s\n' "$B" "$R" "$C" "$R"
+if [ -n "$owner" ]; then
+  printf '     Trust policy condition on token.actions.githubusercontent.com:sub, StringLike, both forms:\n'
+  printf '       %s"repo:%s/%s:*"%s  and  %s"repo:%s@*/%s@*:*"%s\n' "$C" "$owner" "$repo" "$R" "$C" "$owner" "$repo" "$R"
+else
+  printf '     %sTrust policy: sub StringLike "repo:OWNER/REPO:*" and "repo:OWNER@*/REPO@*:*" (no GitHub remote found to fill it in)%s\n' "$D" "$R"
+fi
+printf '     %s(or one secret with a JSON map of variables: gh secret set TFPLS_ENV_JSON < env.json)  More: %s/credentials.md%s\n' "$D" "$docs" "$R"
+printf '  %s2.%s Encrypt saved plans: %sopenssl rand -base64 32 | gh secret set PLAN_ENCRYPTION_KEY%s\n' "$B" "$R" "$C" "$R"
+printf '  %s3.%s Commit the files and open ONE pull request: it plans everything and shows each plan as a comment. Merge it (nothing is applied); %s/tofu apply <workspace>%s works on the next pull request.\n' "$B" "$R" "$C" "$R"
+case $layout in folders|varfile)
+  $newws || printf '     %sWorkspaces that do not exist in your state yet fail the first plan: run again with --create-workspaces (first run only).%s\n' "$D" "$R";;
+esac
+printf '  %s4.%s Approvals follow your repository: the pull request rule of a ruleset on the default branch (1 approval when there is none). You cannot approve your own pull request: add a second account, set the ruleset to 0 approvals, or, as an admin, add %s--now%s to /tofu apply.
+' "$B" "$R" "$C" "$R"
+printf '  %s5.%s Optional: %sgh workflow run tofu.yml -f task=drift%s for a first drift check.\n\n' "$B" "$R" "$C" "$R"

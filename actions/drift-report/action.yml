@@ -1,0 +1,38 @@
+name: drift report
+description: Turn per-run drift results into transitions (in-sync -> drift -> recovered), keep one issue per drifted workspace
+inputs:
+  name: { required: true, description: "workspace name (stack/workspace)" }
+  label: { default: "", description: "short display name" }
+  state:
+    required: true
+    description: "in-sync | drift | error (this run's result)"
+  summary: { default: "" }
+  branch: { default: tfpls-data }
+  issues:
+    description: "open and close one GitHub issue per drifted workspace (the job needs issues: write)"
+    default: "true"
+  github_token: { default: "${{ github.token }}" }
+outputs:
+  transition:
+    description: "none | drifted | recovered | failing"
+    value: ${{ steps.r.outputs.transition }}
+  issue:
+    description: Number of the drift issue, if any
+    value: ${{ steps.r.outputs.issue }}
+runs:
+  using: composite
+  steps:
+    - id: r
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        LABEL: ${{ inputs.label }}
+        STATE: ${{ inputs.state }}
+        SUMMARY: ${{ inputs.summary }}
+        BRANCH: ${{ inputs.branch }}
+        ISSUES: ${{ inputs.issues }}
+        TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: ${{ github.action_path }}/report.sh

@@ -1,0 +1,41 @@
+name: approvals
+description: Approval policy for /tofu apply; the counts come from the default branch ruleset of the repository, the workspace rules from the default branch config
+inputs:
+  entries: { required: true, description: "entries output of detect-workspaces for the pull request (which workspaces it applies); the approval RULES come from the default branch" }
+  config: { default: .tfpls.yml, description: "path of the config file (read from the default branch)" }
+  default_branch: { required: true, description: "name of the repository's default branch (github.event.repository.default_branch)" }
+  enforce: { default: "true", description: "false = only work out the rules (policy settings), do not check approvals (an admin used --now)" }
+  sha: { required: true, description: "current head commit of the pull request" }
+  pr_number: { required: true }
+  comment_id: { default: "" }
+  github_token: { default: "${{ github.token }}" }
+outputs:
+  entries: { description: "the pull request's entries with policy_dir, policy_packs, policy_params and notify_secret taken from the default branch", value: "${{ steps.r.outputs.entries }}" }
+  codeowners: { description: "true when the repository ruleset requires code owner review", value: "${{ steps.r.outputs.codeowners }}" }
+  owner_entries: { description: "rules of the default branch plus the pull request's entries (CODEOWNERS paths)", value: "${{ steps.r.outputs.owner_entries }}" }
+runs:
+  using: composite
+  steps:
+    - id: r
+      shell: bash
+      env:
+        HEAD_ENTRIES: ${{ inputs.entries }}
+        CONFIG: ${{ inputs.config }}
+        DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ inputs.pr_number }}
+        COMMENT_ID: ${{ inputs.comment_id }}
+      run: ${{ github.action_path }}/rules.sh
+    - if: inputs.enforce != 'false'
+      shell: bash
+      env:
+        ENTRIES: ${{ steps.r.outputs.rules }}
+        LAST_PUSH: ${{ steps.r.outputs.last_push }}
+        DEFAULT_BRANCH: ${{ inputs.default_branch }}
+        SHA: ${{ inputs.sha }}
+        PR: ${{ inputs.pr_number }}
+        COMMENT_ID: ${{ inputs.comment_id }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+      run: ${{ github.action_path }}/enforce.sh

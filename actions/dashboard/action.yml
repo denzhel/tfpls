@@ -1,0 +1,33 @@
+name: dashboard
+description: Build the status dashboard (one self-contained HTML page plus a Markdown summary) from the tfpls-data branch
+inputs:
+  branch: { default: tfpls-data }
+  out: { default: tfpls-dashboard, description: "directory (relative to the workspace) that receives index.html and summary.md" }
+  events: { default: "50", description: "how many audit events the activity feed shows" }
+  github_token: { default: "${{ github.token }}" }
+outputs:
+  path:
+    description: Directory that contains index.html and summary.md
+    value: ${{ steps.b.outputs.path }}
+runs:
+  using: composite
+  steps:
+    - id: b
+      shell: bash
+      env:
+        BRANCH: ${{ inputs.branch }}
+        OUT: ${{ inputs.out }}
+        EVENTS: ${{ inputs.events }}
+        TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        SERVER_URL: ${{ github.server_url }}
+        WORKSPACE_DIR: ${{ github.workspace }}
+      run: |
+        set -uo pipefail
+        data=$(mktemp -d)
+        # a missing data branch is fine: the page then says nothing has been recorded yet
+        git clone --quiet --depth 1 --branch "$BRANCH" "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "$data" 2>/dev/null \
+          || echo "::notice::branch \`$BRANCH\` does not exist yet (enable audit: true and run a drift check); building an empty dashboard"
+        "${{ github.action_path }}/build.sh" "$data" "$WORKSPACE_DIR/$OUT"
+        echo "path=$OUT" >> "$GITHUB_OUTPUT"
+        rm -rf "$data"

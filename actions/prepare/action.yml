@@ -1,0 +1,34 @@
+name: prepare
+description: "The start of every job that runs tofu: check out the code, install the tools, export the credentials"
+inputs:
+  entry:
+    description: "JSON of the workspace entry (decides whether conftest is installed); empty = no policies"
+    default: ""
+  ref:
+    description: "commit to check out; empty = the one the event is about"
+    default: ""
+  tofu_version:
+    default: ""
+  role_arn:
+    description: "IAM role to assume through OIDC (the caller passes inputs.role_arn || vars.TFPLS_ROLE_ARN)"
+    default: ""
+  report_pr:
+    description: "pull request or issue number that gets one comment when the role cannot be assumed (from one matrix leg only)"
+    default: ""
+  json:
+    description: "secrets.TFPLS_ENV_JSON"
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with: { ref: "${{ inputs.ref }}", persist-credentials: false }
+    - uses: denzhel/tfpls/actions/setup@main
+      with:
+        tofu_version: "${{ inputs.tofu_version }}"
+        conftest: "${{ inputs.entry != '' && (fromJSON(inputs.entry).policy_dir != '' || fromJSON(inputs.entry).policy_packs != '') }}"
+    - uses: denzhel/tfpls/actions/env@main
+      with:
+        role_arn: ${{ inputs.role_arn }}
+        report_pr: ${{ inputs.report_pr }}
+        json: ${{ inputs.json }}

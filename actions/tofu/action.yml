@@ -1,0 +1,91 @@
+name: tofu plan/apply
+description: Plan (and optionally apply) one workspace, with policy check, plan classification and sticky PR comment
+inputs:
+  entry:
+    description: "the matrix entry of this workspace as JSON (toJSON(fromJSON(entries)[matrix.label]) from detect-workspaces): name, label, dir, workspace, var_file, parallelism, plan_lock, lock_timeout, create_workspace, auto_apply, policy_dir, policy_packs and policy_params come from it"
+    default: ""
+  targets:
+    description: Space-separated -target addresses (validated)
+    default: ""
+  apply:
+    description: "none = plan only | auto = apply per auto_apply rule | force = apply if policy passes"
+    default: none
+  auto_apply:
+    description: "never | always | additive_only (used when apply=auto); default never"
+    default: ""
+  pr_number:
+    description: If set, post/update a sticky PR comment
+    default: ""
+  plan_mode:
+    description: "fresh = plan then apply | reviewed = apply the saved PR plan if valid else re-plan | reviewed_only = apply only a valid saved plan"
+    default: fresh
+  head_sha:
+    description: PR head SHA that keys the saved plan (empty = no pull request, plan cannot be saved or found)
+    default: ""
+  save_plan:
+    description: "true = save the plan as a (encrypted) artifact for a later reviewed apply"
+    default: "false"
+  plan_encryption_key:
+    description: Key used to encrypt saved plans (pass secrets.PLAN_ENCRYPTION_KEY). Empty = stored unencrypted, with a warning.
+    default: ""
+  github_token:
+    default: ${{ github.token }}
+outputs:
+  status:
+    description: "no-changes | planned | applied | skipped | policy-failed | error"
+    value: ${{ steps.run.outputs.status }}
+  summary:
+    value: ${{ steps.run.outputs.summary }}
+  counts:
+    description: 'JSON {"add","change","destroy","replace"} of the plan (replace counts as one add and one destroy); empty when there is no plan'
+    value: ${{ steps.run.outputs.counts }}
+  changes:
+    description: 'JSON array [{"action": added|changed|deleted|replaced, "address"}] of the planned changes (addresses only, at most 50)'
+    value: ${{ steps.run.outputs.changes }}
+  changes_more:
+    description: "how many more changed resources there were beyond the 50 listed in changes"
+    value: ${{ steps.run.outputs.changes_more }}
+  duration:
+    description: "seconds the tofu step took (plan, policy and apply)"
+    value: ${{ steps.run.outputs.duration }}
+  reviewed:
+    description: "true when a saved, reviewed plan was applied or loaded"
+    value: ${{ steps.run.outputs.reviewed }}
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      env:
+        ENTRY: ${{ inputs.entry }}
+        TARGETS: ${{ inputs.targets }}
+        APPLY: ${{ inputs.apply }}
+        AUTO_APPLY: ${{ inputs.auto_apply }}
+        PR: ${{ inputs.pr_number }}
+        PLAN_MODE: ${{ inputs.plan_mode }}
+        REPO_PRIVATE: ${{ github.event.repository.private }}
+        HEAD_SHA: ${{ inputs.head_sha }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        SAVE_PLAN: ${{ inputs.save_plan }}
+        PLAN_ENCRYPTION_KEY: ${{ inputs.plan_encryption_key }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        REPO_ROOT: ${{ github.workspace }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: ${{ github.action_path }}/run.sh
+    - name: Upload reviewed plan
+      if: steps.run.outputs.plan_path != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ steps.run.outputs.plan_name }}
+        path: ${{ steps.run.outputs.plan_path }}
+        retention-days: 14
+        if-no-files-found: error
+        overwrite: true
+    - name: Remove tofu working files from the runner workspace
+      if: always()
+      shell: bash
+      env:
+        DIR: ${{ fromJSON(inputs.entry || '{}').dir }}
+        REPO_ROOT: ${{ github.workspace }}
+      run: |
+        if [ -n "$DIR" ] && [ -d "$REPO_ROOT/$DIR" ]; then (cd "$REPO_ROOT/$DIR" && rm -rf tfplan plan.json plan.txt show.txt apply.txt init.txt policy.txt .terraform); fi

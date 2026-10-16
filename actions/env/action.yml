@@ -1,0 +1,22 @@
+name: export credentials
+description: Export the credentials of the job from one IAM role (GitHub OIDC) and/or one JSON map of environment variables
+inputs:
+  json:
+    description: 'JSON map of env vars for providers and the backend (secrets.TFPLS_ENV_JSON); with role_arn it only needs non-secret settings such as the region'
+    default: ""
+  role_arn:
+    description: "IAM role the job assumes through GitHub OIDC instead of long-lived keys (needs id-token: write)"
+    default: ""
+  report_pr: { default: "", description: "pull request or issue number that gets one comment when the role cannot be assumed (pass it from one matrix leg only)" }
+  github_token: { default: "${{ github.token }}" }
+runs:
+  using: composite
+  steps:
+    - id: export
+      shell: bash
+      env:
+        JSON: ${{ inputs.json }}
+        ROLE_ARN: ${{ inputs.role_arn }}
+        REPORT_PR: ${{ inputs.report_pr }}
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: ${{ github.action_path }}/export.sh

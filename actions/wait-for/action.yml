@@ -1,0 +1,21 @@
+name: wait for
+description: Wait for other jobs of this workflow run (workspaces named in `after:`) to finish; fail when one of them did not succeed
+inputs:
+  jobs:
+    description: "Comma-separated job labels to wait for (empty = nothing to wait for)"
+    default: ""
+  timeout_minutes: { default: "50" }
+  github_token: { default: "${{ github.token }}" }
+runs:
+  using: composite
+  steps:
+    - if: inputs.jobs != ''
+      shell: bash
+      env:
+        WAIT_FOR: ${{ inputs.jobs }}
+        TIMEOUT: ${{ inputs.timeout_minutes }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        ME: ${{ github.job }}
+      run: ${{ github.action_path }}/wait.sh

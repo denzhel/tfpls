@@ -1,0 +1,112 @@
+# Reusable: plan every changed workspace on a pull request.
+# Plan jobs run pull-request code with the same single role as every other job (docs/credentials.md).
+# Caller needs: on: pull_request; permissions: contents: read, pull-requests: write, id-token: write
+name: tfpls plan
+on:
+  workflow_call:
+    inputs:
+      config: { type: string, default: .tfpls.yml }
+      runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","dedicated-terraform"]' }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.10.6" }
+      timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
+    secrets:
+      TFPLS_ENV_JSON: { required: false, description: 'JSON map of env vars for providers/backend' }
+      SLACK_WEBHOOK: { required: false }
+      PLAN_ENCRYPTION_KEY: { required: false, description: 'encrypts saved plans (recommended); see docs/reviewed-plans.md' }
+
+jobs:
+  detect:
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: read, pull-requests: write }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.d.outputs.matrix }}
+      any: ${{ steps.d.outputs.any }}
+      entries: ${{ steps.d.outputs.entries }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { fetch-depth: 0, persist-credentials: false }
+      # Pull requests from forks get no secrets (GitHub withholds them), so a plan could only fail confusingly in init.
+      # Say so, and do not plan. Maintainers can push the branch to this repository to have it planned.
+      - id: fork
+        shell: bash
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ -n "$HEAD_REPO" ] && [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+            msg="This pull request comes from a fork ($HEAD_REPO). Fork pull requests receive no credentials, so they are not planned. A maintainer can push the branch to $GITHUB_REPOSITORY to have it planned."
+            echo "::notice title=Fork pull request not planned::$msg"
+            echo "### Fork pull request not planned" >> "$GITHUB_STEP_SUMMARY"
+            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          fi
+      # a pull request that ADDS the pipeline (the caller workflow is not on the base commit) plans every workspace once, so a newcomer sees
+      # a plan comment in the very first pull request, with credentials and backend checked before anything is merged
+      - id: intro
+        if: steps.fork.outputs.is_fork != 'true'
+        uses: denzhel/tfpls/actions/pr-notes@main
+        with:
+          mode: introduced
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          pr_number: ${{ github.event.pull_request.number }}
+      - id: d
+        if: steps.fork.outputs.is_fork != 'true'
+        uses: denzhel/tfpls/actions/detect-workspaces@main
+        with:
+          config: ${{ inputs.config }}
+          mode: ${{ steps.intro.outputs.introduced == 'true' && 'all' || 'changed' }}
+          base_ref: ${{ github.event.pull_request.base.sha }}
+      # nothing configured and nothing found: say so on the pull request (and remove the note again once workspaces exist)
+      - if: steps.fork.outputs.is_fork != 'true' && steps.d.outputs.configured == '0'
+        uses: denzhel/tfpls/actions/pr-notes@main
+        with:
+          mode: no-workspaces
+          config: ${{ inputs.config }}
+          pr_number: ${{ github.event.pull_request.number }}
+      - if: steps.fork.outputs.is_fork != 'true' && steps.d.outputs.configured != '0'
+        uses: denzhel/tfpls/actions/pr-notes@main
+        with:
+          mode: clear
+          pr_number: ${{ github.event.pull_request.number }}
+      # a workspace that an earlier commit of this PR planned but the latest commit no longer touches: say so on its comment
+      - if: steps.fork.outputs.is_fork != 'true'
+        uses: denzhel/tfpls/actions/mark-outdated@main
+        with:
+          pr_number: ${{ github.event.pull_request.number }}
+          names: ${{ steps.d.outputs.names }}
+          sha: ${{ github.event.pull_request.head.sha }}
+
+  plan:
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    # least privilege: only what this job calls the API for (a subset of what the caller grants)
+    permissions: { contents: read, pull-requests: write, id-token: write }
+    runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      max-parallel: 20   # plans write nothing shared
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    concurrency:
+      group: tfpls-${{ github.repository }}-${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}-plan-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: denzhel/tfpls/actions/prepare@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          tofu_version: ${{ inputs.tofu_version }}
+          role_arn: ${{ vars.TFPLS_ROLE_ARN }}
+          report_pr: ${{ strategy.job-index == 0 && github.event.pull_request.number || '' }}
+          json: ${{ secrets.TFPLS_ENV_JSON }}
+      - id: t
+        uses: denzhel/tfpls/actions/tofu@main
+        with:
+          entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
+          pr_number: ${{ github.event.pull_request.number }}
+          apply: none
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          save_plan: 'true'
+          plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
