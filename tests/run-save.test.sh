@@ -29,6 +29,10 @@ grep -q 'Plan not saved' "$R" && grep -q 'openssl rand -base64 32 | gh secret se
 grep -q 'Reviewed plan saved' "$R" && bad "run.sh still adds the 'Reviewed plan saved' line" || ok "no duplicate 'Reviewed plan saved' line above the plan"
 grep -qF 'is not set: the saved plan is stored unencrypted' "$R" && ok "the unencrypted-plan warning stays" || bad "unencrypted warning missing"
 
+# the apply comment of a reviewed plan has no "Applying the reviewed plan" line; the run log and the job summary still name the plan
+grep -q 'Applying the reviewed plan' "$R" && bad "run.sh still puts 'Applying the reviewed plan' into the comment" || ok "no 'Applying the reviewed plan' line in the apply comment"
+grep -q '::notice::Using the reviewed plan' "$R" && grep -q 'plan_note="\*\*$NAME\*\*: used the reviewed plan' "$R" && ok "the run log and the job summary still name the reviewed plan" || bad "notice or plan_note missing"
+
 # a held state lock is named in the summary (drift issues and alerts show it)
 grep -q 'the state is locked by' "$R" && grep -q 'unlock/parse.sh' "$R" && ok "a failed plan on a held lock says who holds it and since when" || bad "lock summary missing"
 

@@ -153,7 +153,6 @@ if [ "$use_reviewed" = true ]; then
   tofu show -no-color tfplan > plan.txt 2>&1 || { summary="could not read the reviewed plan"; finish; }
   cat plan.txt
   rc=2
-  body_extra="🔒 Applying the reviewed plan \`$pname\` (planned ${planned_at:-earlier})."
   echo "::notice::Using the reviewed plan $pname (planned ${planned_at:-earlier}); not re-planning"
   plan_note="**$NAME**: used the reviewed plan \`$pname\` (planned ${planned_at:-earlier})."
 else
