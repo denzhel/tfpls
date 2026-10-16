@@ -4,7 +4,7 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
-## Unreleased
+## v0.1.5
 
 - A superseded plan comment no longer ends with the `/tofu apply <workspace>` hint; only the newest plan comment offers it.
 
