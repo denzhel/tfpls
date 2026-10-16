@@ -23,12 +23,14 @@ on:
       require_up_to_date: { type: boolean, default: true, description: "/tofu apply refuses a pull request that is behind its base branch" }
       max_parallel: { type: number, default: 4, description: "workspaces applied, drift-checked or fixed at the same time (pull request plans always run up to 20)" }
       timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
+      allow_unencrypted_plans: { type: boolean, default: false, description: "true = a plan saved without PLAN_ENCRYPTION_KEY on a private repository is stored unencrypted without the warning (default: warn); public repositories never save one" }
 
 jobs:
   plan:
     if: github.event_name == 'pull_request'
     uses: denzhel/tfpls/.github/workflows/plan.yml@main
     with:
+      allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
       runs_on: ${{ inputs.runs_on }}
       config: ${{ inputs.config }}
@@ -39,6 +41,7 @@ jobs:
     if: github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.pull_request
     uses: denzhel/tfpls/.github/workflows/comment-ops.yml@main
     with:
+      allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       require_up_to_date: ${{ inputs.require_up_to_date }}
       max_parallel: ${{ inputs.max_parallel }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
@@ -114,6 +117,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'fix')
     uses: denzhel/tfpls/.github/workflows/drift-fix.yml@main
     with:
+      allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       max_parallel: ${{ inputs.max_parallel }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
       runs_on: ${{ inputs.runs_on }}

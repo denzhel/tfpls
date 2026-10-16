@@ -16,6 +16,7 @@ on:
       tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.10.6" }
       max_parallel: { type: number, default: 4, description: "how many workspaces are planned/applied at the same time" }
       timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
+      allow_unencrypted_plans: { type: boolean, default: false, description: "true = a plan saved without PLAN_ENCRYPTION_KEY on a private repository is stored unencrypted without the warning (default: warn); public repositories never save one" }
       apply_environment: { type: string, default: "", description: "GitHub Environment used by apply-capable jobs (/tofu apply, /tofu unlock); holds the apply credentials, can require reviewers" }
       require_up_to_date: { type: boolean, default: true, description: "apply needs the PR branch to include the base branch" }
     secrets:
@@ -222,6 +223,7 @@ jobs:
           plan_mode: ${{ needs.parse.outputs.cmd == 'apply' && 'reviewed_only' || 'fresh' }}
           save_plan: ${{ needs.parse.outputs.cmd == 'plan' && 'true' || 'false' }}
           plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
+          allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       - id: u
         if: needs.parse.outputs.cmd == 'unlock'
         uses: denzhel/tfpls/actions/unlock@main

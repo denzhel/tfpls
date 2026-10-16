@@ -33,6 +33,24 @@ grep -qF 'is not set: the saved plan is stored unencrypted' "$R" && ok "the unen
 grep -q 'Applying the reviewed plan' "$R" && bad "run.sh still puts 'Applying the reviewed plan' into the comment" || ok "no 'Applying the reviewed plan' line in the apply comment"
 grep -q '::notice::Using the reviewed plan' "$R" && grep -q 'plan_note="\*\*$NAME\*\*: used the reviewed plan' "$R" && ok "the run log and the job summary still name the reviewed plan" || bad "notice or plan_note missing"
 
+# allow_unencrypted_plans: the opt-in only silences the "not encrypted" warning; the public-repository guard does not read it
+. "$here/actions/tofu/format.sh"
+for v in "" false FALSE 1 yes; do tfpls_unencrypted_warns "$v" && w="warns" || w="quiet"; eq "opt-in '$v' keeps the warning" "$w" "warns"; done
+tfpls_unencrypted_warns true && bad "opt-in true still warns" || ok "opt-in true silences the warning"
+grep -q 'tfpls_unencrypted_warns "${ALLOW_UNENCRYPTED_PLANS:-false}"' "$R" && ok "run.sh asks the helper before it warns" || bad "run.sh does not use the helper"
+guardline=$(grep -n 'PLAN_ENCRYPTION_KEY:-}" \] && \[ "${REPO_PRIVATE:-}" != true' "$R" | head -1)
+case "$guardline" in *ALLOW_UNENCRYPTED_PLANS*) bad "the public-repository guard reads the opt-in";; *) ok "the public-repository guard does not read the opt-in (public and unknown visibility never save unencrypted)";; esac
+[ "$(grep -c 'ALLOW_UNENCRYPTED_PLANS' "$R")" = 1 ] && ok "the opt-in is used in exactly one place of run.sh" || bad "ALLOW_UNENCRYPTED_PLANS used $(grep -c 'ALLOW_UNENCRYPTED_PLANS' "$R") times"
+eq "the action input defaults to false" "$(yq -r '.inputs.allow_unencrypted_plans.default' "$here/actions/tofu/action.yml")" "false"
+grep -q 'ALLOW_UNENCRYPTED_PLANS: ${{ inputs.allow_unencrypted_plans }}' "$here/actions/tofu/action.yml" && ok "the action passes the input to run.sh" || bad "env not wired in action.yml"
+for f in tofu plan comment-ops drift-fix; do
+  eq "$f.yml declares allow_unencrypted_plans (boolean, default false)" "$(yq -r '.on.workflow_call.inputs.allow_unencrypted_plans | .type + "/" + (.default|tostring)' "$here/.github/workflows/$f.yml")" "boolean/false"
+done
+for f in plan comment-ops drift-fix; do
+  eq "$f.yml passes it to the tofu action" "$(grep -c 'allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}' "$here/.github/workflows/$f.yml")" "1"
+done
+eq "tofu.yml passes it to the three workflows that save plans" "$(grep -c 'allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}' "$here/.github/workflows/tofu.yml")" "3"
+
 # a held state lock is named in the summary (drift issues and alerts show it)
 grep -q 'the state is locked by' "$R" && grep -q 'unlock/parse.sh' "$R" && ok "a failed plan on a held lock says who holds it and since when" || bad "lock summary missing"
 

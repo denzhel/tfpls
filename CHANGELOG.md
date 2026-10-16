@@ -7,6 +7,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 ## Unreleased
 
 - The comment of an apply that uses a reviewed plan no longer starts with the `🔒 Applying the reviewed plan …` line; the run log and the job summary still name the plan.
+- New input `allow_unencrypted_plans` (default `false`): on a private repository without `PLAN_ENCRYPTION_KEY` the saved plan is stored unencrypted without the warning. Public repositories still never save a plan without a key.
 
 ## v0.1.2
 

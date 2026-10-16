@@ -257,7 +257,7 @@ if [ "${SAVE_PLAN:-false}" = true ] && [ "$use_reviewed" = false ]; then
     spath=$TFPLS_OUT
     out plan_path "$spath"; out plan_name "$sname"
     enc="encrypted"; case "$spath" in *.tgz) enc="NOT encrypted";; esac
-    if [ "$enc" = "NOT encrypted" ]; then
+    if [ "$enc" = "NOT encrypted" ] && tfpls_unencrypted_warns "${ALLOW_UNENCRYPTED_PLANS:-false}"; then
       body_extra="$body_extra
 ⚠️ \`PLAN_ENCRYPTION_KEY\` is not set: the saved plan is stored unencrypted and may contain secret values. See https://github.com/${GITHUB_ACTION_REPOSITORY:-denzhel/tfpls}/blob/main/docs/reviewed-plans.md."
       echo "::warning::PLAN_ENCRYPTION_KEY is not set; the saved plan is unencrypted"
