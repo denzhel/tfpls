@@ -25,6 +25,10 @@ pack=$(grep -n 'elif tfpls_pack' "$R" | head -1 | cut -d: -f1)
 grep -q 'REPO_PRIVATE: ${{ github.event.repository.private }}' "$here/actions/tofu/action.yml" && ok "the action passes the repository's visibility" || bad "REPO_PRIVATE not passed"
 grep -q 'Plan not saved' "$R" && grep -q 'openssl rand -base64 32 | gh secret set PLAN_ENCRYPTION_KEY' "$R" && ok "the note says how to fix it" || bad "note missing"
 
+# the apply hint appears once, under the plan (format.sh); the saved-plan line above it is gone, the unencrypted warning stays
+grep -q 'Reviewed plan saved' "$R" && bad "run.sh still adds the 'Reviewed plan saved' line" || ok "no duplicate 'Reviewed plan saved' line above the plan"
+grep -qF 'is not set: the saved plan is stored unencrypted' "$R" && ok "the unencrypted-plan warning stays" || bad "unencrypted warning missing"
+
 # a held state lock is named in the summary (drift issues and alerts show it)
 grep -q 'the state is locked by' "$R" && grep -q 'unlock/parse.sh' "$R" && ok "a failed plan on a held lock says who holds it and since when" || bad "lock summary missing"
 

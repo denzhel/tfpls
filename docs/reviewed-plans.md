@@ -84,7 +84,7 @@ Everyday debugging does not change:
 To inspect the saved file itself:
 
 ```bash
-# 1. download the artifact (its name is in the PR comment: "Reviewed plan saved: `tfpls-plan-...`")
+# 1. download the artifact (named `tfpls-plan-<workspace>-<sha12>-<targets>`; see the run's artifacts list)
 gh run list --repo OWNER/REPO --workflow tofu --limit 5          # find the run
 gh run download RUN_ID --repo OWNER/REPO -n tfpls-plan-terraform__prod-us-west-1-0123456789ab-all -D plan
 

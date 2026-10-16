@@ -4,6 +4,10 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
+## Unreleased
+
+- Plan comments no longer repeat the apply hint above the plan (the `📦 Reviewed plan saved` line); the single `/tofu apply` hint under the plan stays.
+
 ## v0.1.0
 
 First release as tfpls: reusable GitHub Actions workflows and composite actions for OpenTofu on AWS with S3 state. Source-available (FSL), runs on your Actions minutes.
