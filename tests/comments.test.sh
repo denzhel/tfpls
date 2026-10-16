@@ -106,4 +106,63 @@ mark '{"terraform/dev":{"name":"terraform/dev"},"terraform/prod":{"name":"terraf
 mark '{}'
 [ "$(sort "$T/patched" | tr '\n' ' ')" = "repos/o/r/issues/comments/1 repos/o/r/issues/comments/2 " ] && ok "nothing selected => every unmarked plan comment is marked; already-marked, human comments and the pipeline notes (introduced, no-workspaces) are not" || bad "patched: $(sort "$T/patched" | tr '\n' ' ')"
 
+# several comments of one workspace: only the newest one gets the "Outdated" banner
+cat > "$T/several.json" <<'J'
+[
+ {"id":20,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\nplan old"},
+ {"id":21,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\nplan new"}
+]
+J
+rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/several.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES='[]' bash "$here/actions/mark-outdated/mark.sh" >/dev/null 2>&1
+[ "$(cat "$T/patched" 2>/dev/null)" = "repos/o/r/issues/comments/21" ] && ok "with several comments of a workspace only the newest is marked outdated" || bad "patched: $(cat "$T/patched" 2>/dev/null | tr '\n' ' ')"
+
+# ---- tfpls_post_comment: every run posts a new comment, the older ones get a "superseded" banner
+mkdir "$T/bin2"; cat > "$T/bin2/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *"-X PATCH"*) url=; body=; while [ $# -gt 0 ]; do case "$1" in repos/*) url=$1;; esac; [ "$1" = -f ] && body=${2#body=}; shift; done
+                echo "PATCH $url" >> "$STUB_DIR/calls"; printf '%s\n----\n' "$body" >> "$STUB_DIR/bodies"
+                [ -n "${STUB_FAIL_PATCH:-}" ] && exit 1; echo '{}';;
+  *"-f body="*) echo "POST" >> "$STUB_DIR/calls"
+                [ -n "${STUB_FAIL_POST:-}" ] && exit 1
+                echo '{"id":99,"html_url":"https://github.com/o/r/pull/7#issuecomment-99"}';;
+  *comments*)   cat "$STUB_COMMENTS";;
+esac
+STUB
+chmod +x "$T/bin2/gh"
+cat > "$T/posted.json" <<'J'
+[
+ {"id":10,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\nplan one"},
+ {"id":11,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n> 🔁 **Superseded** by https://x/old. The plan below is kept for reference only.\n<!-- tfpls-status: planned -->\nplan zero"},
+ {"id":12,"user":{"type":"User"},"body":"<!-- tfpls:terraform/dev -->\nstranger marker"},
+ {"id":13,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/prod -->\n<!-- tfpls-status: planned -->\nplan of another workspace"},
+ {"id":14,"body":"a human comment that mentions <!-- tfpls:terraform/dev --> in the middle"},
+ {"id":15,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\nplan two"}
+]
+J
+post() { rm -f "$T/calls" "$T/bodies"; env -i PATH="$T/bin2:$PATH" STUB_DIR="$T" STUB_COMMENTS="${1:-$T/posted.json}" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 ${STUB_FAIL_PATCH:+STUB_FAIL_PATCH=1} ${STUB_FAIL_POST:+STUB_FAIL_POST=1} \
+  bash -c '. "$1/actions/tofu/post.sh"; tfpls_post_comment "<!-- tfpls:terraform/dev -->" "NEW PLAN BODY"' _ "$here" > "$T/post.out" 2>&1; rc=$?; }
+post
+[ $rc -eq 0 ] && ok "tfpls_post_comment succeeds" || bad "rc=$rc"
+[ "$(head -1 "$T/calls")" = POST ] && ok "the new comment is posted first (a failure never leaves the pull request without a plan)" || bad "calls: $(tr '\n' ' ' < "$T/calls")"
+[ "$(sed -n '2,$p' "$T/calls" | sort | tr '\n' ' ')" = "PATCH repos/o/r/issues/comments/10 PATCH repos/o/r/issues/comments/15 " ] && ok "every older plan comment of this workspace gets the banner; nothing else is edited" || bad "calls: $(tr '\n' ' ' < "$T/calls")"
+grep -q 'comments/12\|comments/13\|comments/14\|comments/11' "$T/calls" && bad "a stranger's, a human's, another workspace's or an already superseded comment was edited" || ok "a stranger's marker comment, human comments, other workspaces and superseded comments are never edited (negative cases)"
+grep -q 'Superseded\*\* by https://github.com/o/r/pull/7#issuecomment-99' "$T/bodies" && ok "the banner links the new comment" || bad "banner link"
+grep -q 'plan one' "$T/bodies" && grep -q 'plan two' "$T/bodies" && ok "the old plan text is kept below the banner" || bad "old text lost"
+[ "$(head -4 "$T/bodies")" = "$(printf '<!-- tfpls:terraform/dev -->\n> 🔁 **Superseded** by https://github.com/o/r/pull/7#issuecomment-99. The plan below is kept for reference only.\n<!-- tfpls-status: planned -->\nplan one')" ] && ok "the marker stays on the first line, the banner on the second" || bad "layout: $(head -4 "$T/bodies")"
+# idempotent: nothing left that is not yet superseded => only the POST
+cat > "$T/done.json" <<'J'
+[
+ {"id":10,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n> 🔁 **Superseded** by https://x/1. The plan below is kept for reference only.\n<!-- tfpls-status: planned -->\nplan one"}
+]
+J
+post "$T/done.json"
+[ "$(tr '\n' ' ' < "$T/calls")" = "POST " ] && ok "an already superseded comment is not edited again" || bad "calls: $(tr '\n' ' ' < "$T/calls")"
+echo '[]' > "$T/none.json"; post "$T/none.json"
+[ "$(tr '\n' ' ' < "$T/calls")" = "POST " ] && ok "the first plan of a workspace is just posted" || bad "calls: $(tr '\n' ' ' < "$T/calls")"
+STUB_FAIL_PATCH=1 post
+[ $rc -eq 0 ] && grep -q '::warning::could not mark the older plan comment' "$T/post.out" && ok "a failing banner is a warning and the run goes on" || bad "rc=$rc out: $(cat "$T/post.out")"
+STUB_FAIL_POST=1 post
+[ "$(tr '\n' ' ' < "$T/calls")" = "POST " ] && grep -q '::error::could not post the plan comment' "$T/post.out" && ok "a failing post is an ::error:: and no older comment is marked superseded" || bad "calls: $(tr '\n' ' ' < "$T/calls") out: $(cat "$T/post.out")"
+
 done_tests
