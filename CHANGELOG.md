@@ -4,7 +4,7 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
-## Unreleased
+## v0.1.1
 
 - Plan comments no longer repeat the apply hint above the plan (the `📦 Reviewed plan saved` line); the single `/tofu apply` hint under the plan stays.
 
