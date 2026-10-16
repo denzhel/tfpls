@@ -4,7 +4,8 @@
 # tfpls_post_comment <marker> <body>
 # Every run posts a NEW comment; the newest one is the live one. The bot's older comments with the same marker keep their
 # text and get a one-line banner that links the new comment (the marker stays on the first line). The new comment is posted
-# first, so a failure never leaves the pull request without a plan. Needs GITHUB_REPOSITORY and PR.
+# first, so a failure never leaves the pull request without a plan. The trailing apply hint of an older comment is removed with
+# the banner, so only the newest comment offers `/tofu apply`. Needs GITHUB_REPOSITORY and PR.
 # Only the bot's own comments are touched: a stranger's comment with the marker is never edited.
 tfpls_post_comment() {
   local marker=$1 body=$2 old new url line id banner text
@@ -22,7 +23,8 @@ tfpls_post_comment() {
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     id=$(jq -r .id <<<"$line")
-    text=$(jq -r --arg b "$banner" '.body | split("\n") | .[0] + "\n" + $b + "\n" + (.[1:] | join("\n"))' <<<"$line")
+    # the apply hint (`/tofu apply <ws>` to apply) is the very last line of a plan comment; an older plan must not offer it
+    text=$(jq -r --arg b "$banner" '.body | sub("\n+`/tofu apply [^`\n]+` to apply\\s*$"; "") | split("\n") | .[0] + "\n" + $b + "\n" + (.[1:] | join("\n"))' <<<"$line")
     gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$text" >/dev/null 2>&1 \
       || echo "::warning::could not mark the older plan comment $id as superseded"
   done <<<"$old"

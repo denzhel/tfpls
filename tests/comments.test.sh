@@ -196,6 +196,19 @@ echo '[]' > "$T/none.json"; post "$T/none.json"
 [ "$(tr '\n' ' ' < "$T/calls")" = "POST " ] && ok "the first plan of a workspace is just posted" || bad "calls: $(tr '\n' ' ' < "$T/calls")"
 STUB_FAIL_PATCH=1 post
 [ $rc -eq 0 ] && grep -q '::warning::could not mark the older plan comment' "$T/post.out" && ok "a failing banner is a warning and the run goes on" || bad "rc=$rc out: $(cat "$T/post.out")"
+# the apply hint goes away together with getting the banner; only the newest plan comment offers /tofu apply
+printf '%s\n' '[{"id":40,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\n**Plan:** 1 to add\n### 📝 [dev](https://run/1) plan logs\n\n<details><summary>Click here to expand</summary>\n\n```terraform\nPlan: 1 to add\n```\n</details>\n\n`/tofu apply dev` to apply"}]' > "$T/hint1.json"
+post "$T/hint1.json"
+{ ! grep -q '/tofu apply' "$T/bodies"; } && grep -q 'Superseded\*\* by' "$T/bodies" && grep -q 'Plan: 1 to add' "$T/bodies" && ok "a superseded comment loses its apply hint and keeps banner and plan text" || bad "hint kept or text lost: $(cat "$T/bodies")"
+[ "$(sed -n 1p "$T/bodies")" = "<!-- tfpls:terraform/dev -->" ] && [ "$(tail -2 "$T/bodies" | head -1)" = "</details>" ] && ok "the marker stays on line 1 and no blank line is left where the hint was" || bad "layout: $(tail -3 "$T/bodies")"
+printf '%s\n' '[{"id":41,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: applied -->\n**Applied:** 0 added, 1 changed, 0 destroyed.\n### ✅ [dev](https://run/2) apply logs\n\n<details><summary>Click here to expand</summary>\n\n```terraform\nApply complete! Resources: 0 added, 1 changed, 0 destroyed.\n```\n</details>"}]' > "$T/hint2.json"
+post "$T/hint2.json"
+grep -q 'Superseded\*\* by' "$T/bodies" && grep -q 'Apply complete!' "$T/bodies" && grep -q '</details>$' <(tail -2 "$T/bodies" | head -1) && ok "a comment without a hint (an apply comment) only gets the banner (negative case)" || bad "no-hint comment changed: $(cat "$T/bodies")"
+printf '%s\n' '[{"id":42,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\n**Plan:** 1 to add\n### 📝 x\n\n<details>\n\n```terraform\nthe text `/tofu apply dev` to apply inside the plan stays\nPlan: 1 to add\n```\n</details>\n\n`/tofu apply dev` to apply"}]' > "$T/hint3.json"
+post "$T/hint3.json"
+[ "$(grep -c '/tofu apply dev' "$T/bodies")" = 1 ] && grep -q 'inside the plan stays' "$T/bodies" && ok "the same words inside the plan text are kept; only the trailing hint line is removed (negative case)" || bad "mid-text changed: $(grep -n 'tofu apply' "$T/bodies")"
+grep -q 'tofu apply' "$here/actions/tofu/post.sh" && ok "post.sh documents and implements the hint removal" || bad "post.sh"
+
 STUB_FAIL_POST=1 post
 [ "$(tr '\n' ' ' < "$T/calls")" = "POST " ] && grep -q '::error::could not post the plan comment' "$T/post.out" && ok "a failing post is an ::error:: and no older comment is marked superseded" || bad "calls: $(tr '\n' ' ' < "$T/calls") out: $(cat "$T/post.out")"
 
