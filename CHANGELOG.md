@@ -4,7 +4,7 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
-## Unreleased
+## v0.1.2
 
 - **A new plan comment on every run.** Each plan run and each apply posts a new comment for its workspace instead of editing the first one, so it is clear which plan sits under which command. The older comments of that workspace keep their text and get a `Superseded by <link>` banner. The `Outdated` banner is only added to the newest comment of a workspace.
 
