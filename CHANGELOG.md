@@ -4,6 +4,10 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
+## Unreleased
+
+- The comment of a successful apply now shows the apply output (resource actions, `Apply complete!`, first line `**Applied:** N added, N changed, N destroyed.`) instead of repeating the plan. The `Outputs:` block is never posted to the comment.
+
 ## v0.1.3
 
 - The comment of an apply that uses a reviewed plan no longer starts with the `🔒 Applying the reviewed plan …` line; the run log and the job summary still name the plan.

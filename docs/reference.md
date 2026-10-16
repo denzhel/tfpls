@@ -153,7 +153,7 @@ GitHub allows at most 256 jobs in one matrix. A change that selects more workspa
 
 ## Plan comments
 
-Every plan run and every apply posts a **new** comment for its workspace; the newest one is the live one. The older comments of that workspace keep their text and get a banner under the first line: `> 🔁 **Superseded** by <link to the newer comment>. The plan below is kept for reference only.` A comment is laid out like this:
+Every plan run and every apply posts a **new** comment for its workspace; the newest one is the live one. The older comments of that workspace keep their text and get a banner under the first line: `> 🔁 **Superseded** by <link to the newer comment>. The plan below is kept for reference only.` The comment of a successful apply shows what the apply did (the resource actions and `Apply complete!`, first line `**Applied:** N added, N changed, N destroyed.`), not the plan again; the `Outputs:` block is never posted to a comment. A plan comment is laid out like this:
 
 ````markdown
 **Plan:** 1 to add, 1 to change, 0 to destroy.
