@@ -265,8 +265,6 @@ if [ "${SAVE_PLAN:-false}" = true ] && [ "$use_reviewed" = false ]; then
     spath=$TFPLS_OUT
     out plan_path "$spath"; out plan_name "$sname"
     enc="encrypted"; case "$spath" in *.tgz) enc="NOT encrypted";; esac
-    body_extra="${body_extra:+$body_extra
-}📦 Reviewed plan saved: \`$sname\` ($enc), apply it with \`/tofu apply ${LABEL:-$NAME}\`."
     if [ "$enc" = "NOT encrypted" ]; then
       body_extra="$body_extra
 ⚠️ \`PLAN_ENCRYPTION_KEY\` is not set: the saved plan is stored unencrypted and may contain secret values. See https://github.com/${GITHUB_ACTION_REPOSITORY:-denzhel/tfpls}/blob/main/docs/reviewed-plans.md."
