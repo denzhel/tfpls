@@ -52,3 +52,8 @@ tfpls_comment_body() {
   [ "$status" = planned ] && [ -z "${TFPLS_NO_HINT:-}" ] && printf '\n`/tofu apply %s` to apply' "$label"
   return 0
 }
+
+# tfpls_unencrypted_warns <allow>: succeeds when a plan saved without a key still carries the "not encrypted" warning.
+# The opt-in (allow_unencrypted_plans) only silences the warning; whether an unencrypted plan may be saved at all is decided
+# by the public-repository guard in run.sh, which does not look at the opt-in.
+tfpls_unencrypted_warns() { [ "${1:-false}" != true ]; }

@@ -28,6 +28,9 @@ inputs:
   plan_encryption_key:
     description: Key used to encrypt saved plans (pass secrets.PLAN_ENCRYPTION_KEY). Empty = stored unencrypted, with a warning.
     default: ""
+  allow_unencrypted_plans:
+    description: "true = without a key, a plan saved on a private repository is stored unencrypted without the warning (public repositories never save one)"
+    default: "false"
   github_token:
     default: ${{ github.token }}
 outputs:
@@ -68,6 +71,7 @@ runs:
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         SAVE_PLAN: ${{ inputs.save_plan }}
         PLAN_ENCRYPTION_KEY: ${{ inputs.plan_encryption_key }}
+        ALLOW_UNENCRYPTED_PLANS: ${{ inputs.allow_unencrypted_plans }}
         GH_TOKEN: ${{ inputs.github_token }}
         REPO_ROOT: ${{ github.workspace }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

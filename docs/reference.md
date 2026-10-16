@@ -145,6 +145,7 @@ Everything the caller can set, with `with:` on the `tofu.yml` job. The default `
 | `require_up_to_date` | `true` | `/tofu apply` refuses a pull request that is behind its base branch |
 | `max_parallel` | `4` | workspaces applied, drift-checked or fixed at the same time (pull request plans run up to 20) |
 | `timeout_minutes` | `60` | time limit of the jobs that run tofu |
+| `allow_unencrypted_plans` | `false` | `true` = on a **private** repository without `PLAN_ENCRYPTION_KEY`, saved plans are stored unencrypted without the warning; public repositories still never save a plan without a key ([reviewed-plans.md](reviewed-plans.md#why-encrypt)) |
 
 The manual run offers the tasks `drift`, `locks` (`workspaces` = locks to release by name, see [locks.md](locks.md)), `dashboard` and `fix`. The dashboard publishes to the data branch; GitHub Pages is an option of `dashboard.yml` ([dashboard.md](dashboard.md)).
 

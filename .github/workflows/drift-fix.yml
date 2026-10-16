@@ -18,6 +18,7 @@ on:
       tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for" }
       max_parallel: { type: number, default: 4 }
       timeout_minutes: { type: number, default: 60 }
+      allow_unencrypted_plans: { type: boolean, default: false, description: "true = a plan saved without PLAN_ENCRYPTION_KEY on a private repository is stored unencrypted without the warning (default: warn); public repositories never save one" }
       apply_environment: { type: string, default: "", description: "GitHub Environment used by the jobs that apply (can require reviewers)" }
     secrets:
       TFPLS_ENV_JSON: { required: false }
@@ -114,6 +115,7 @@ jobs:
           plan_mode: ${{ needs.parse.outputs.cmd == 'apply' && 'reviewed_only' || 'fresh' }}
           save_plan: ${{ needs.parse.outputs.cmd == 'plan' && 'true' || 'false' }}
           plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
+          allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       - if: always() && needs.parse.outputs.cmd != 'plan'
         uses: denzhel/tfpls/actions/finish@main
         with:
