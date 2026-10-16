@@ -34,7 +34,7 @@ grep -q 'the state is locked by' "$R" && grep -q 'unlock/parse.sh' "$R" && ok "a
 
 # small fixes: parallelism reaches the apply too, and a plan comment that cannot be posted is an error
 grep -q 'tofu apply .*-parallelism="${PARALLELISM:-10}"' "$R" && ok "apply gets -parallelism" || bad "apply without -parallelism"
-[ "$(grep -c 'could not \(post\|update\) the plan comment' "$R")" = 2 ] && ok "a failed plan comment call is an ::error::" || bad "plan comment errors not reported"
+grep -q 'tfpls_post_comment "$marker" "$body"' "$R" && grep -q '::error::could not post the plan comment' "$here/actions/tofu/post.sh" && ok "a failed plan comment call is an ::error::" || bad "plan comment errors not reported"
 eq "/tofu plan runs at 20 in parallel (it writes nothing shared)" "$(yq -r '.jobs.command.strategy."max-parallel"' "$here/.github/workflows/comment-ops.yml" | grep -c "&& 20")" "1"
 
 done_tests

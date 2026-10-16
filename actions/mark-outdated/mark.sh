@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# For every sticky plan comment (<!-- tfpls:NAME -->) of a workspace that is NOT in NAMES (a JSON array of names), add a banner saying
+# For the newest plan comment (<!-- tfpls:NAME -->) of every workspace that is NOT in NAMES (a JSON array of names), add a banner saying
 # that the latest commit does not affect it and the plan is from an earlier commit. Idempotent. Best-effort.
 set -uo pipefail
 REPO="${GITHUB_REPOSITORY:?}"
@@ -9,9 +9,10 @@ banner="> ⏭️ **Outdated:** this workspace is not affected by the latest comm
 
 comments=$(gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" | jq -s 'add // []') || { echo "::warning::could not list comments"; exit 0; }
 jq -c --argjson sel "$selected" '
-  .[] | select(.user.type == "Bot" and (.body | startswith("<!-- tfpls:")))
-      | {id, body, name: (.body | capture("^<!-- tfpls:(?<n>[^ ]+) -->").n)}
-      | select(.name != "introduced" and .name != "no-workspaces")   # notes of the pipeline, not a workspace plan
+  [ .[] | select(.user.type == "Bot" and (.body | startswith("<!-- tfpls:")))
+        | {id, body, name: (.body | capture("^<!-- tfpls:(?<n>[^ ]+) -->").n)}
+        | select(.name != "introduced" and .name != "no-workspaces") ]   # notes of the pipeline, not a workspace plan
+  | group_by(.name) | map(max_by(.id)) | .[]   # only the newest comment of a workspace; the older ones are superseded
       | select(.name as $n | ($sel | index($n)) == null)
       | select(.body | contains("is not affected by the latest commit") | not)' <<<"$comments" |
 while IFS= read -r c; do

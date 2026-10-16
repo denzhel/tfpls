@@ -4,7 +4,7 @@ OpenTofu on GitHub Actions: a plan on every pull request, `/tofu apply` by comme
 
 ## What it looks like
 
-A pull request that changes `workspaces/dev` gets one comment, updated in place on every push:
+A pull request that changes `workspaces/dev` gets a new comment on every plan run (the older ones are marked as superseded):
 
 ````markdown
 **Plan:** 1 to add, 1 to change, 0 to destroy.

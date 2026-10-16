@@ -13,6 +13,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$here/plan-store.sh"
 # shellcheck source=format.sh
 . "$here/format.sh"
+# shellcheck source=post.sh
+. "$here/post.sh"
 # shellcheck source=entry.sh
 . "$here/entry.sh"
 
@@ -62,16 +64,7 @@ comment() {
     if [ "$(printf '%s' "$body" | wc -c | tr -d ' ')" -le 62000 ] || [ "$limit" -le 4000 ]; then break; fi
     limit=$((limit / 2))
   done
-  local id
-  id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" --paginate \
-        | jq -s -r --arg m "$marker" 'add // [] | .[] | select(.user.type == "Bot" and (.body|startswith($m))) | .id' | head -1)  # only the bot's own comment: a stranger's comment with the marker is never edited
-  if [ -n "$id" ]; then
-    gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null \
-      || echo "::error::could not update the plan comment (does the workflow grant pull-requests: write?)"
-  else
-    gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" >/dev/null \
-      || echo "::error::could not post the plan comment (does the workflow grant pull-requests: write?)"
-  fi
+  tfpls_post_comment "$marker" "$body"   # a new comment per run; the bot's older ones for this workspace are marked superseded
 }
 
 finish() {
