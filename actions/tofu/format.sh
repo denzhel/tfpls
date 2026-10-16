@@ -31,16 +31,30 @@ tfpls_plan_line() {
   grep -E '^Plan: ' "$1" | tail -1 | sed -E 's/^Plan: //'
 }
 
+# tfpls_apply_line <file>: "N added, N changed, N destroyed." from the apply's own "Apply complete! Resources: ..." line (empty when there is none)
+tfpls_apply_line() {
+  [ -f "$1" ] || return 0
+  grep -E '^Apply complete! Resources: ' "$1" | tail -1 | sed -E 's/^Apply complete! Resources: //'
+}
+
+# tfpls_apply_view: stdin (the output of tofu apply) -> stdout without the refresh/read lines and without the "Outputs:" block.
+# Output values are never put into a pull request comment (a plan shows them as "known after apply"); the run log has them.
+tfpls_apply_view() { tfpls_strip_refresh | sed '/^Outputs:/,$d'; }
+
 # tfpls_comment_body <marker> <icon> <status> <label> <run_url> <plan_file> <summary> <extra> <limit>
 # The sticky plan comment: marker, hidden status, summary line, heading linking to the run,
 # notices, the plan in one collapsed section, and the apply hint. A clean "no changes" has no collapsed section.
 tfpls_comment_body() {
   local marker=$1 icon=$2 status=$3 label=$4 url=$5 file=$6 summary=$7 extra=$8 limit=$9
-  local verb=plan first="" plan_line
+  local verb=plan first="" plan_line apply_line
   [ "$status" = applied ] && verb=apply
   plan_line=$(tfpls_plan_line "$file")
   case "$status" in
-    planned|applied|policy-failed) [ -n "$plan_line" ] && first="**Plan:** $plan_line" ;;
+    planned|policy-failed) [ -n "$plan_line" ] && first="**Plan:** $plan_line" ;;
+    applied)
+      apply_line=$(tfpls_apply_line "$file")
+      if [ -n "$apply_line" ]; then first="**Applied:** $apply_line"
+      elif [ -n "$plan_line" ]; then first="**Plan:** $plan_line"; fi ;;
   esac
   [ -n "$first" ] || first="**$summary**"
   printf '%s\n<!-- tfpls-status: %s -->\n%s\n### %s [%s](%s) %s logs\n' "$marker" "$status" "$first" "$icon" "$label" "$url" "$verb"

@@ -72,6 +72,40 @@ b=$(tfpls_comment_body "$M" "🟢" no-changes dev "https://run/1" "$T/err.txt" "
 b=$(tfpls_comment_body "$M" "📝" planned dev "https://run/1" "$T/huge.txt" "" "" 20000)
 [ "$(printf '%s' "$b" | wc -c)" -lt 22000 ] && sed -n 3p <<<"$b" | grep -q '6000 to add' && ok "a huge plan is clipped but the summary line stays" || bad "clip in body"
 
+# ---- the comment of a successful apply shows the apply output, not the plan
+cat > "$T/apply.txt" <<'A'
+module.x.terraform_data.pipeline_check: Refreshing state... [id=1]
+data.aws_x.y: Reading...
+data.aws_x.y: Read complete after 0s [id=z]
+module.x.terraform_data.pipeline_check: Modifying... [id=1]
+module.x.terraform_data.pipeline_check: Modifications complete after 0s [id=1]
+
+Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
+
+Outputs:
+
+api_token = "super-secret-value"
+A
+[ "$(tfpls_apply_line "$T/apply.txt")" = "0 added, 1 changed, 0 destroyed." ] && ok "the counts come from the apply's own 'Apply complete!' line" || bad "apply line: $(tfpls_apply_line "$T/apply.txt")"
+[ -z "$(tfpls_apply_line "$T/show.txt")" ] && [ -z "$(tfpls_apply_line "$T/missing.txt")" ] && ok "no apply line for a plan or a missing file" || bad "apply line from a plan"
+tfpls_apply_view < "$T/apply.txt" > "$T/view.txt"
+{ ! grep -q 'Refreshing state\|Reading\.\.\.\|Read complete' "$T/view.txt"; } && grep -q 'Modifying\.\.\.' "$T/view.txt" && grep -q 'Apply complete!' "$T/view.txt" && ok "the apply view keeps the resource actions and drops the refresh lines" || bad "apply view"
+{ ! grep -q 'Outputs:\|super-secret-value\|api_token' "$T/view.txt"; } && ok "the Outputs block (output values) never reaches the comment" || bad "outputs leaked into the view"
+b=$(tfpls_comment_body "$M" "✅" applied dev "https://run/9" "$T/view.txt" "" "" 45000)
+[ "$(sed -n 3p <<<"$b")" = "**Applied:** 0 added, 1 changed, 0 destroyed." ] && ok "an applied comment starts with the apply counts" || bad "applied first line: $(sed -n 3p <<<"$b")"
+[ "$(sed -n 4p <<<"$b")" = "### ✅ [dev](https://run/9) apply logs" ] && ok "the heading of an apply comment is unchanged" || bad "applied heading: $(sed -n 4p <<<"$b")"
+grep -q 'Modifications complete' <<<"$b" && grep -q 'Apply complete!' <<<"$b" && { ! grep -q 'will be updated in-place\|execution plan' <<<"$b"; } && ok "the collapsed section shows the apply, not the plan" || bad "applied body"
+{ ! grep -q '/tofu apply' <<<"$b"; } && ok "an applied comment has no apply hint" || bad "hint on applied"
+b=$(tfpls_comment_body "$M" "✅" applied dev "https://run/9" "$T/show.txt" "" "" 45000)
+[ "$(sed -n 3p <<<"$b")" = "**Plan:** 1 to add, 1 to change, 0 to destroy." ] && ok "without apply output an applied comment falls back to the plan line" || bad "fallback: $(sed -n 3p <<<"$b")"
+b=$(tfpls_comment_body "$M" "📝" planned dev "https://run/9" "$T/show.txt" "" "" 45000)
+[ "$(sed -n 3p <<<"$b")" = "**Plan:** 1 to add, 1 to change, 0 to destroy." ] && ok "a plan comment keeps the plan line (negative case)" || bad "plan line changed"
+b=$(tfpls_comment_body "$M" "❌" error dev "https://run/9" "$T/err.txt" "apply failed" "" 45000)
+[ "$(sed -n 3p <<<"$b")" = "**apply failed**" ] && grep -q 'Error: boom' <<<"$b" && ok "a failed apply keeps its error text (negative case)" || bad "error comment changed"
+RS="$here/actions/tofu/run.sh"
+grep -q 'tfpls_apply_view < apply.txt > apply_view.txt' "$RS" && grep -q 'shown="$REPO_ROOT/$DIR/apply_view.txt"' "$RS" && ok "run.sh builds the apply view after a successful apply and uses it for the comment" || bad "run.sh wiring"
+grep -q 'apply_view.txt init.txt' "$RS" && ok "the apply view file is cleaned up" || bad "cleanup"
+
 # ---- mark-outdated with a stub gh
 mkdir "$T/bin"; cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash

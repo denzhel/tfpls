@@ -38,7 +38,7 @@ STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
 # plan, its JSON, plan/apply output) and the provider directory when this script ends, however it ends.
 cleanup() {
   if [ -n "${REPO_ROOT:-}" ] && [ -n "${DIR:-}" ] && [ -d "$REPO_ROOT/$DIR" ]; then
-    ( cd "$REPO_ROOT/$DIR" && rm -rf tfplan plan.json plan.txt show.txt apply.txt init.txt policy.txt .terraform )
+    ( cd "$REPO_ROOT/$DIR" && rm -rf tfplan plan.json plan.txt show.txt apply.txt apply_view.txt init.txt policy.txt .terraform )
   fi
 }
 trap cleanup EXIT
@@ -56,6 +56,8 @@ comment() {
   local body limit=45000 shown="$REPO_ROOT/$DIR/plan.txt"
   # the readable plan (show.txt) for a plan that was made; the raw output (errors, apply failures) otherwise
   case "$status" in planned|applied|policy-failed) [ -s "$REPO_ROOT/$DIR/show.txt" ] && shown="$REPO_ROOT/$DIR/show.txt";; esac
+  # a successful apply shows what the apply did (not the plan again)
+  [ "$status" = applied ] && [ -s "$REPO_ROOT/$DIR/apply_view.txt" ] && shown="$REPO_ROOT/$DIR/apply_view.txt"
   while :; do
     body=$(tfpls_comment_body "$marker" "$icon" "$status" "${LABEL:-$NAME}" "$RUN_URL" "$shown" "$summary" "${destroy_banner:+$destroy_banner
 
@@ -288,6 +290,7 @@ if [ "$do_apply" = true ]; then
   tofu apply -input=false -no-color -parallelism="${PARALLELISM:-10}" -lock-timeout="${LOCK_TIMEOUT:-0s}" tfplan 2>&1 | tee apply.txt
   if [ "${PIPESTATUS[0]}" -eq 0 ]; then
     status=applied
+    tfpls_apply_view < apply.txt > apply_view.txt
   else
     status=error; summary="apply failed"
     if grep -qiE "plan is stale|can no longer be applied" apply.txt; then
