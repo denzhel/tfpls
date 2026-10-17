@@ -67,6 +67,9 @@ issue COLLABORATOR "" "$THIN"; gate elaborate EVENT_NAME=issues; eq "an issue of
 issue OWNER "" "$FULL"; gate elaborate EVENT_NAME=issues; eq "an already elaborated issue costs nothing (no run)" "$run|$reason" "false|the issue is already elaborated"
 issue OWNER "" "$SKELETON"; gate elaborate EVENT_NAME=issues; eq "the empty template skeleton is not elaborated yet (the agent fills it)" "$run" "true"
 issue OWNER "" $'### Outcome\n\nx\n\n### Tasks\n\n- [ ] one only'; gate elaborate EVENT_NAME=issues; eq "a partly filled template is still elaborated" "$run" "true"
+BOLD=$'**Outcome**\n\nSomething.\n\n**Tasks**\n\n- [ ] do the first thing\n- [ ] do the second thing\n\n**Acceptance criteria**\n\n- [ ] it works\n\n**Test criteria**\n\n- [ ] Local: a test'
+issue OWNER "" "$BOLD"; gate elaborate EVENT_NAME=issues; eq "a body with bold section titles (as the agent writes it) counts as elaborated" "$run|$reason" "false|the issue is already elaborated"
+issue OWNER "" $'Outcome is nice\nTasks: none\n- [ ] a\n- [ ] b'; gate elaborate EVENT_NAME=issues; eq "section words in plain text are not section titles" "$run" "true"
 
 # answers
 reset; gate elaborate EVENT_NAME=issue_comment ACTOR_ASSOC=OWNER COMMENT_BODY="my answer"; eq "a comment on an issue that is not waiting for answers: no run" "$run|$reason" "false|the issue is not waiting for answers"

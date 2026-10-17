@@ -38,8 +38,9 @@ body=$(jq -r '.body // ""' <<<"$issue_json")
 # a body counts as elaborated when the template sections are there and at least one task and one criterion has text
 elaborated() {
   local b=$1
-  grep -qiE '^#+[[:space:]]+Outcome' <<<"$b" && grep -qiE '^#+[[:space:]]+Tasks' <<<"$b" \
-    && grep -qiE '^#+[[:space:]]+Acceptance criteria' <<<"$b" && grep -qiE '^#+[[:space:]]+Test criteria' <<<"$b" \
+  # a section title is a heading (### Outcome) or, as the agent writes it, a bold line (**Outcome**)
+  title() { grep -qiE "^(#+[[:space:]]+|\*\*)$1(\*\*)?[[:space:]]*\$" <<<"$b"; }
+  title Outcome && title Tasks && title "Acceptance criteria" && title "Test criteria" \
     && [ "$(grep -cE '^[[:space:]]*- \[[ xX]\] +[^[:space:]]' <<<"$b")" -ge 2 ]
 }
 
