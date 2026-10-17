@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - id: d
-        uses: denzhel/tfpls/actions/dashboard@main
+        uses: denzhel/tfpls/actions/dashboard@v0.2.0-rc.2
       - name: Run summary
         shell: bash
         run: cat "${{ steps.d.outputs.path }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
