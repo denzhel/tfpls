@@ -43,6 +43,8 @@ mkdir -p "$T/real" && ( cd "$here" && git archive HEAD | tar -x -C "$T/real" )
 git -C "$T/real" init -q && git -C "$T/real" checkout -q -B main
 mkdir -p "$T/real/$slug" && git init -q --bare "$T/real/$slug" && echo "${slug%%/*}/" >> "$T/real/.git/info/exclude"
 G() { git -C "$T/real" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
+# annotated tags need an identity (CI runners have none); the script itself never invents one
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false
 G add -A >/dev/null; G commit -qm wip --allow-empty
 G remote add origin "$slug"
 G config remote.origin.pushurl "$T/real/$slug"   # the script pushes from a temporary worktree: an absolute push URL; the relative fetch URL is what it derives the slug from
