@@ -19,6 +19,8 @@ jobs:
 
 A release is self-contained: inside a release commit the workflows reference their own composite actions by the exact release tag (not `@main`), so `plan.yml@v0` runs the actions of that same release, not whatever is on `main`. Third-party actions are pinned by commit SHA in every release.
 
+Pre-release tags (`vX.Y.Z-rc.N`) are for the maintainers' testing: `@v0` never points at one, and you should not use one in production.
+
 ### Upgrade
 
 1. Read the release notes for breaking changes (a new major version, `v1`, signals them).
@@ -28,6 +30,23 @@ A release is self-contained: inside a release commit the workflows reference the
 ### Roll back
 
 Change the tag back in the caller (`@v0.3.0` -> `@v0.2.9`) and merge. Exact tags are immutable, so the previous release behaves exactly as before. If a bad release was published, a maintainer deletes the bad exact tag and re-points the major tag (below).
+
+## For maintainers: when to release
+
+Release **once per batch of changes**, not once per fix. Test the batch on a pre-release tag first (next section); only the real release moves `v0` and reaches everyone on `@v0`.
+
+- A new input, output, command or behaviour is a **minor** version (`v0.2.0`); a fix is a **patch** (`v0.2.1`). A change callers must act on is called out in the CHANGELOG.
+- Cut a patch release only when users need the fix soon (a security fix, a bug that blocks real use). Other fixes wait for the next batch; the CHANGELOG keeps them under *Unreleased*.
+- An issue is Done when its change is merged and verified on the pre-release; the CHANGELOG says which version ships it.
+
+## For maintainers: testing a batch (pre-release tags)
+
+```bash
+tools/release.sh --dry-run v0.2.0-rc.1   # how many references would be pinned; changes nothing
+tools/release.sh v0.2.0-rc.1             # tag v0.2.0-rc.1 only; v0 does NOT move
+```
+
+The pre-release tag is made exactly like a release tag (a commit off `main` whose internal references point at the tag) but the major tag stays where it is, so nobody on `@v0` sees it. In the test repository pin the tag in the caller (`uses: OWNER/tfpls/.github/workflows/tofu.yml@v0.2.0-rc.1`) and run the checks. If something is wrong, fix it on `main` and cut `v0.2.0-rc.2`; pre-release tags are never moved. When the batch is good, cut the real release (`tools/release.sh v0.2.0`, below), put the caller back on `@v0`, and add a GitHub Release page for it if you want one.
 
 ## For maintainers: cutting a release
 

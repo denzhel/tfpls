@@ -3,15 +3,17 @@
 # which would defeat pinning: a consumer on `@v0` would still run main's actions. A release therefore makes a
 # commit (not on main) in which those internal references point at the exact version tag, tags it, and moves
 # the major tag (v0) to it.
-#   tools/release.sh [--dry-run] vX.Y.Z
+#   tools/release.sh [--dry-run] vX.Y.Z          a release: moves the major tag (v0) to it
+#   tools/release.sh [--dry-run] vX.Y.Z-rc.N      a pre-release for testing a batch: the exact tag only, the major tag does NOT move
 # Without --dry-run the script must run on a clean, pushed main; it pushes only the tags, never main.
 set -euo pipefail
 
 dry=false
 if [ "${1:-}" = --dry-run ]; then dry=true; shift; fi
 ver=${1:-}
-[[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "usage: tools/release.sh [--dry-run] vX.Y.Z" >&2; exit 1; }
+[[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || { echo "usage: tools/release.sh [--dry-run] vX.Y.Z | vX.Y.Z-rc.N" >&2; exit 1; }
 major=${ver%%.*}
+pre=false; [[ "$ver" == *-rc.* ]] && pre=true   # a pre-release is tested in a caller by its exact tag; callers on the major tag never see it
 
 cd "$(git rev-parse --show-toplevel)"
 remote=$(git remote get-url origin 2>/dev/null || true)
@@ -45,11 +47,16 @@ for f in $files; do yq '.' "$f" >/dev/null || { echo "invalid YAML after rewrite
 
 n=$(grep -rhoE "${slug}/(actions/[a-z-]+|\.github/workflows/[a-z-]+\.yml)@${ver}" .github/workflows actions | wc -l | tr -d ' ')
 echo "release $ver: $n internal references now point at @${ver} in $(wc -w <<<"$files" | tr -d ' ') files"
+[ "$pre" = true ] && echo "pre-release: $major stays where it is"
 if [ "$dry" = true ]; then git diff --stat | tail -1; echo "dry run: nothing committed, tagged or pushed"; exit 0; fi
 
 git -c user.name="tfpls release" -c user.email="noreply@users.noreply.github.com" commit -qam "release ${ver}: internal references pinned to ${ver}"
 git tag -a "$ver" -m "$ver"
-git tag -f -a "$major" -m "$major (moves to the latest ${major}.x.y release)" "${ver}^{commit}"
+if [ "$pre" = false ]; then git tag -f -a "$major" -m "$major (moves to the latest ${major}.x.y release)" "${ver}^{commit}"; fi
 git push origin "refs/tags/$ver"
-git push --force origin "refs/tags/$major"
-echo "published $ver and moved $major"
+if [ "$pre" = false ]; then
+  git push --force origin "refs/tags/$major"
+  echo "published $ver and moved $major"
+else
+  echo "published $ver (pre-release: $major not moved)"
+fi
