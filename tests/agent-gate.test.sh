@@ -142,6 +142,22 @@ I=$(c claude Bot NONE $'x\n<!-- tfpls-agent-run: implement -->'); comments "[$I,
 gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement "; eq "the per-issue cap applies to a manual implementation" "$run" "false"
 comments '[]'
 
+# the per-day cap applies to a manual run exactly as to an event (both phases)
+reset; issue OWNER "" "$FULL"
+echo '{"workflow_runs":[{"id":51},{"id":52},{"id":53}]}' > "$FX/runs-claude-elaborate.yml.json"
+for i in 51 52 53; do echo '{"jobs":[{"name":"gate","conclusion":"success"},{"name":"agent","conclusion":"success"}]}' > "$FX/jobs-$i.json"; done
+gate elaborate EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER MAX_ELAB_DAY=3
+case "$reason" in "the daily cap is reached (3 of 3 elaborate runs in 24 hours)") ok "the daily cap stops a manual elaboration";; *) bad "manual elaborate daily cap: $run $reason";; esac
+gate elaborate EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER MAX_ELAB_DAY=4; eq "a manual elaboration one below the daily cap still runs" "$run" "true"
+echo '{"workflow_runs":[{"id":61},{"id":62}]}' > "$FX/runs-claude-implement.yml.json"
+for i in 61 62; do echo '{"jobs":[{"name":"agent","conclusion":"success"}]}' > "$FX/jobs-$i.json"; done
+issue OWNER ready "$FULL"
+gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement " MAX_IMPL_DAY=2
+case "$reason" in "the daily cap is reached (2 of 2 implement runs in 24 hours)") ok "the daily cap stops a manual implementation";; *) bad "manual implement daily cap: $run $reason";; esac
+grep -q "daily limit" "$T/w/gate-comment.md" && ok "and says why on the issue" || bad "manual daily cap comment"
+gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement " MAX_IMPL_DAY=3; eq "a manual implementation one below the daily cap still runs" "$run" "true"
+rm -f "$FX"/runs-*.json "$FX"/jobs-*.json
+
 # ---- the trusted copy: text of strangers never reaches the agent
 reset; issue OWNER needs-info "$FULL"
 O=$(c owner User OWNER "The owner's answer: use Sonnet.")
