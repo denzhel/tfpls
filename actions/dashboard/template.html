@@ -40,8 +40,6 @@ h2{font-size:15px;margin:0 0 8px}
 <select id="stack" aria-label="Stack"><option value="">All stacks</option></select>
 </div>
 <div class="card"><table><thead><tr><th data-k="name">Workspace</th><th data-k="state">Status</th><th data-k="checked" class="hide-sm">Checked</th><th data-k="summary">Pending</th><th data-k="applied" class="hide-sm">Last apply</th></tr></thead><tbody id="rows"></tbody></table><div class="empty" id="none" hidden>No workspace matches.</div></div>
-<h2>Last 30 days</h2>
-<div class="card" id="ins" style="padding:12px"></div>
 <h2>Recent activity</h2>
 <div class="card"><ul class="feed" id="feed"></ul><div class="empty" id="nofeed" hidden>No audit events yet. Enable <code>audit: true</code> in the workflows.</div></div>
 </main>
@@ -90,14 +88,6 @@ ev.forEach(function(e){var li=el('li');li.appendChild(el('span','muted',ago(e.ts
  if(e.counts&&typeof e.counts==='object')meta.push('+'+(e.counts.add||0)+' ~'+(e.counts.change||0)+' -'+(e.counts.destroy||0));
  li.appendChild(el('span','muted',meta.join(' · ')));fe.appendChild(li)});
 $('nofeed').hidden=ev.length>0;
-(function(){var I=D.insights||{},box=$('ins');function line(label,val){var p=el('div');p.appendChild(el('span','muted',label+': '));p.appendChild(el('strong',null,String(val)));box.appendChild(p)}
- line('Applies',(I.applies||0)+' ('+(I.applied||0)+' applied, '+(I.failed||0)+' failed)');
- line('Success rate',I.success_rate==null?'–':I.success_rate+'%');
- line('Applied from a reviewed plan',I.reviewed_share==null?'–':I.reviewed_share+'%');
- line('Average apply time',I.avg_apply_seconds==null?'–':I.avg_apply_seconds+' s'+(I.slowest_apply?' (slowest: '+I.slowest_apply.workspace+', '+I.slowest_apply.seconds+' s)':''));
- line('Locks released',I.locks_released||0);
- if(I.busiest&&I.busiest.length)line('Busiest',I.busiest.map(function(b){return b.workspace+' ('+b.applies+')'}).join(', '));
- var u=I.unused||[];line('In sync with no apply for '+(I.unused_days||90)+' days (possibly unused)',u.length?u.map(function(x){return x.workspace}).join(', '):'none')})();
 var root=document.documentElement;try{var th=localStorage.getItem('tfpls-theme');if(th)root.setAttribute('data-theme',th)}catch(e){}
 $('theme').addEventListener('click',function(){var dark=root.getAttribute('data-theme')?root.getAttribute('data-theme')==='dark':matchMedia('(prefers-color-scheme:dark)').matches;var n=dark?'light':'dark';root.setAttribute('data-theme',n);try{localStorage.setItem('tfpls-theme',n)}catch(e){}});
 })();

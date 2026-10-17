@@ -4,6 +4,10 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
+## Unreleased
+
+- The dashboard no longer has the "Last 30 days" block (applies, success rate, durations, locks, busiest, possibly unused workspaces). The workspace table and the recent activity feed stay.
+
 ## v0.1.6
 
 - The issue of a drifted workspace shows the plan (the `Plan:` summary line and the plan in a collapsed section, like a plan comment) instead of a run link and how-to text. The tofu action has a new output `plan_text`; the drift workflow passes it to the drift report.
