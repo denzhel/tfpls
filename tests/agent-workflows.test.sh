@@ -54,7 +54,11 @@ eq "elaborate: opened issues and comments start it" "$(y "$E" '.on | keys | sort
 # ---- tools: elaboration is read-only; implementation cannot touch its own guards or the release path
 ae=$(args "$E"); ai=$(args "$I")
 grep -qE 'Edit|Write|Bash\(git|Bash\(bash|gh pr create' <<<"$ae" && bad "elaborate: the agent can change files or run code" || ok "elaborate: read-only tools, plus issue edit and comment"
-grep -q 'Bash(git push -u origin agent/:\*)' <<<"$ai" && ok "implement: it can push only agent/ branches" || bad "implement: push rule"
+grep -qF 'Bash(git push -u origin agent/*)' <<<"$ai" && ok "implement: it can push only agent/ branches" || bad "implement: push rule"
+# a rule `Bash(prefix/:*)` needs a word boundary after the prefix and never matches `prefix/file` (it denied the first real run): path-like prefixes use `*`
+grep -qE 'Bash\([^)]*/:\*\)' <<<"$ai$ae" && bad "a Bash rule ends in '/:*', which matches nothing" || ok "no Bash rule ends in '/:*' (it would deny real commands)"
+grep -qF 'Bash(bash tests/*)' <<<"$ai" && ok "implement: it can run the test files (bash tests/<name>.test.sh)" || bad "implement: tests cannot be run"
+grep -q 'no pipes' <<<"$(prompt "$I")" && ok "implement: the prompt asks for one simple command per call" || bad "implement: prompt lacks the one-command rule"
 grep -qE 'git push:\*|git push origin|git push -u origin [^a]' <<<"$ai" && bad "implement: a broad git push is allowed" || ok "implement: no broad git push"
 for guard in ".github/workflows/claude-" "tools/agent-" "AGENTS.md"; do
   grep -q "disallowedTools.*Edit($guard" <<<"$ai" && grep -q "Write($guard" <<<"$ai" && ok "implement: it cannot edit $guard" || bad "implement: $guard is editable"
