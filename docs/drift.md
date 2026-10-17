@@ -43,7 +43,7 @@ overrides:
 
 ## Fixing a drift on demand (no pull request)
 
-Every drifted workspace has an issue `Drift: <workspace>`. Someone with **write access** can fix exactly that workspace from there, or from the Actions tab, without opening a pull request:
+Every drifted workspace has an issue `Drift: <workspace>`. Its body has a small table (since when, last check, the plan summary) and the **plan** of the drift, in a collapsed section like a plan comment, refreshed on every drift check; there is no run link or how-to text in it, the ways to fix it are the ones below. Someone with **write access** can fix exactly that workspace from there, or from the Actions tab, without opening a pull request:
 
 | Where | What |
 |---|---|

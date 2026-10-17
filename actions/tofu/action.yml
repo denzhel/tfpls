@@ -45,6 +45,9 @@ outputs:
   changes:
     description: 'JSON array [{"action": added|changed|deleted|replaced, "address"}] of the planned changes (addresses only, at most 50)'
     value: ${{ steps.run.outputs.changes }}
+  plan_text:
+    description: "the readable plan (clipped like a plan comment) when a plan was made; empty otherwise"
+    value: ${{ steps.run.outputs.plan_text }}
   changes_more:
     description: "how many more changed resources there were beyond the 50 listed in changes"
     value: ${{ steps.run.outputs.changes_more }}

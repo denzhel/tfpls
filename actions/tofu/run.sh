@@ -25,6 +25,15 @@ tofu() { env -u GH_TOKEN -u GITHUB_TOKEN -u PLAN_ENCRYPTION_KEY tofu "$@"; }
 conftest() { env -u GH_TOKEN -u GITHUB_TOKEN -u PLAN_ENCRYPTION_KEY conftest "$@"; }
 oneline() { printf '%s' "$1" | tr '\r\n' '  '; }
 out() { echo "$1=$(oneline "$2")" >> "$GITHUB_OUTPUT"; }
+# a multi-line step output (the plan text); the delimiter is random, so no line of the value can end the output early
+outml() { local d; d="TFPLS_$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"; { echo "$1<<$d"; printf '%s\n' "$2"; echo "$d"; } >> "$GITHUB_OUTPUT"; }
+# the readable plan, clipped like a plan comment, for the callers that show it (the drift issue). It is an output, not a file:
+# self-hosted runners keep their workspace, and cleanup() removes everything that can hold plan text.
+plan_text_out() {
+  case "$status" in planned|skipped|policy-failed) ;; *) return 0;; esac
+  [ -s "$REPO_ROOT/$DIR/show.txt" ] || return 0
+  outml plan_text "$(tfpls_clip_plan "$REPO_ROOT/$DIR/show.txt" 45000)"
+}
 
 tfpls_load_entry
 AUTO_APPLY="${AUTO_APPLY:-never}"
@@ -72,6 +81,7 @@ comment() {
 finish() {
   out status "$status"; out summary "$summary"; out reviewed "$reviewed_used"; out counts "$counts"; out changes "$changes"; out changes_more "$changes_more"; out duration "$SECONDS"
   [ -n "$plan_note" ] && echo "$plan_note" >> "$STEP_SUMMARY"
+  plan_text_out
   comment
   case "$status" in error|policy-failed) exit 1;; esac
   exit 0

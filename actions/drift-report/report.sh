@@ -22,6 +22,8 @@ summary=$(printf '%s' "${SUMMARY:-}" | tr '\r\n' '  ' | head -c 300)
 export TFPLS_REMOTE_URL="$REMOTE"
 # shellcheck source=../record/datastore.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../record/datastore.sh"
+# shellcheck source=../tofu/format.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../tofu/format.sh"
 
 # the writer runs on a fresh clone of the data branch on every attempt (a lost race starts over from the new tip)
 prev="in-sync"; since="$now"; issue=""; transition=none
@@ -54,6 +56,22 @@ outv transition "$transition"
 # ---- issue lifecycle (after the state is stored, so a lost race never opens two)
 if [ "${ISSUES:-true}" = true ] && { [ "$transition" != none ] || [ "$STATE" = drift ]; }; then
   title="Drift: $label"
+  # the plan, laid out like a plan comment: the summary line and the plan in one collapsed section (nothing without a plan text)
+  plan_block=""
+  if [ -n "${PLAN_TEXT:-}" ]; then
+    pf=$(mktemp); printf '%s\n' "$PLAN_TEXT" > "$pf"
+    pl=$(tfpls_plan_line "$pf")
+    plan_block="
+${pl:+**Plan:** $pl
+}
+<details><summary>Click here to expand</summary>
+
+\`\`\`terraform
+$(tfpls_clip_plan "$pf" 45000)
+\`\`\`
+</details>"
+    rm -f "$pf"
+  fi
   body="**\`$label\`** has drifted from its code.
 
 | | |
@@ -61,16 +79,7 @@ if [ "${ISSUES:-true}" = true ] && { [ "$transition" != none ] || [ "$STATE" = d
 | Since | $since |
 | Last check | $now |
 | Plan | ${summary:-see the run} |
-
-[Latest run]($RUN_URL)
-
-**Fix it without a pull request** (needs write access; the next drift check closes this issue when it is back in sync):
-- comment \`/tofu plan\` here to see exactly what would change, then \`/tofu apply\` to apply that plan, or \`/tofu fix\` to plan and apply in one go
-- or start the manual run of the workflow with task \`fix\` and workspace \`$label\`
-
-To change the code instead (accept the drift), open a pull request.
-
-This issue is opened when a workspace drifts and closed automatically when it is back in sync."
+$plan_block"
   open_state=""
   if [ -n "$issue" ]; then open_state=$(gh issue view "$issue" --repo "$REPO" --json state --jq .state 2>/dev/null || true); fi
   case "$STATE" in
