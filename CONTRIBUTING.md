@@ -60,6 +60,8 @@ gh workflow run claude-elaborate.yml --ref <branch> -f issue=<n>
 gh workflow run claude-implement.yml --ref <branch> -f issue=<n> [-f instructions="..."]
 ```
 
+What a manual run can and cannot test: the Claude action refuses to run (it skips itself with a warning, and the run reports "the agent produced no result") when the workflow file of the run differs from the one on the default branch; that is a security check, so a branch cannot rewrite the workflow to get at the token. Changes to what the workflow only references run for real from a branch: the gate (`tools/agent-gate.sh`), the report script, the rules in `AGENTS.md`, the tests and the docs. A change to the workflow file itself (the prompt text in it, the tool lists, the model) can only be tested by the gate and the static tests before the merge, and for real after it.
+
 A manual run goes through the same gate as the events (kill switch, caps, a trusted copy of the issue; `ready` is required for an implementation) and costs the same, so test on a throwaway issue and delete it afterwards. Only the owner can start one.
 
 Safety: only the owner starts a run, and only the words of the owner, collaborators and our own bots reach the agent (a prepared file; it cannot call `gh issue view`); its tools are an explicit list; neither workflow uses `pull_request_target`. A workflow cannot write the Project board, so the board is synced from the labels afterwards.

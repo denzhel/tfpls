@@ -170,7 +170,7 @@ rm -f "$FX/posted.md"; env PHASE=implement ISSUE=7 REPO=o/r RUN_URL=http://run O
 eq "the report is posted with turns, seconds, cost and the cap marker" "$rc|$(grep -c '14 turns, 183 s, cost 0.46 USD' "$FX/posted.md")|$(grep -c '<!-- tfpls-agent-run: implement -->' "$FX/posted.md")" "0|1|1"
 grep -q "14 turns" "$T/sum" && ok "the same line goes to the run summary" || bad "summary line"
 rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=failure EXEC="$T/missing.json" bash "$RP" >/dev/null 2>&1
-eq "a failed run without an execution file is still reported (it counts toward the cap)" "$(grep -c 'failure, ? turns, ? s, cost not reported' "$FX/posted.md")|$(grep -c 'tfpls-agent-run: elaborate' "$FX/posted.md")" "1|1"
+eq "a run without an execution file says the agent produced no result and still counts toward the cap" "$(grep -c 'the agent produced no result' "$FX/posted.md")|$(grep -c 'failure' "$FX/posted.md")|$(grep -c 'tfpls-agent-run: elaborate' "$FX/posted.md")" "1|1|1"
 STUB_COMMENT_RC=1 env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success bash "$RP" >/dev/null 2>&1; eq "a failing comment never fails the job" "$?" "0"
 # a "success" that did nothing is never silent: denied tool calls, the agent's last words, and whether a pull request exists
 cat > "$T/bin/gh" <<'STUB'
