@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build.sh <data-dir> <out-dir>   data-dir = a checkout of the tfpls-data branch (drift/*.json, audit/*.jsonl)
 # Writes <out-dir>/index.html (one self-contained page, no external requests) and <out-dir>/summary.md.
-# Env: REPO (owner/name, shown in the title), SERVER_URL (default https://github.com), EVENTS (feed length, default 50), TFPLS_NOW.
+# Env: REPO (owner/name, shown in the title), SERVER_URL (default https://github.com), EVENTS (at most this many events from the last 24 hours, default 50), TFPLS_NOW.
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 data=${1:?usage: build.sh <data-dir> <out-dir>}; out=${2:?usage: build.sh <data-dir> <out-dir>}
@@ -34,7 +34,9 @@ json=$(jq -n --slurpfile dr "$dj" --slurpfile au "$aj" --arg repo "${REPO:-}" --
       + [ $applied | to_entries[] | select(.key as $k | ($drift | map(name_of) | index($k)) == null)
           | {name: .key, stack: (.key | split("/")[0]), state: "unknown", since: null, checked: null, summary: "", issue: null, issue_url: null,
              last_apply: {ts: .value.ts, status: .value.status, actor: .value.actor, run: .value.run}} ] ) as $ws
-  | {generated: $now, repo: $repo, workspaces: $ws, events: $ev[0:$n]}')
+  | ($now | fromdateiso8601 - 86400) as $cut
+  | {generated: $now, repo: $repo, workspaces: $ws,
+     events: ([ $ev[] | select((.ts | try fromdateiso8601 catch null) as $t | $t != null and $t >= $cut) ] | .[0:$n])}')
 
 # the page: embedded JSON must not be able to close the script element
 printf '%s' "$json" | jq -c . | sed 's/</\\u003c/g' > "$out/data.json"   # "<" only occurs inside strings; \u003c is the same text for JSON.parse
@@ -48,6 +50,6 @@ jq -r '
   + ( .workspaces | sort_by(if .state=="error" then 0 elif .state=="drift" then 1 elif .state=="unknown" then 2 else 3 end, .name)
       | map("| `\(.name)` | \(.state | icon) \(.state) | \(if .state == "in-sync" then "" else (.summary | gsub("\\|"; "/")) end) | \(.checked // "–") |") | join("\n") )
   + "\n\n### Recent activity\n\n"
-  + ( if (.events | length) == 0 then "_No audit events yet._" else (.events[0:10] | map("- \(.ts) · \(.kind) `\(.workspace)` · \(.status)\(if .actor != "" and .actor != null then " · \(.actor)" else "" end)") | join("\n")) end)
+  + ( if (.events | length) == 0 then "_No audit events in the last 24 hours._" else (.events[0:10] | map("- \(.ts) · \(.kind) `\(.workspace)` · \(.status)\(if .actor != "" and .actor != null then " · \(.actor)" else "" end)") | join("\n")) end)
 ' <<<"$json" > "$out/summary.md"
 echo "dashboard built: $(jq '.workspaces | length' <<<"$json") workspaces, $(jq '.events | length' <<<"$json") events"
