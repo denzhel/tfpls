@@ -4,7 +4,7 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
-## Unreleased
+## v0.1.7
 
 - The dashboard no longer has the "Last 30 days" block (applies, success rate, durations, locks, busiest, possibly unused workspaces). The workspace table and the recent activity feed stay.
 
