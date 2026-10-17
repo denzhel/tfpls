@@ -4,6 +4,10 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
+## Unreleased
+
+- The issue of a drifted workspace shows the plan (the `Plan:` summary line and the plan in a collapsed section, like a plan comment) instead of a run link and how-to text. The tofu action has a new output `plan_text`; the drift workflow passes it to the drift report.
+
 ## v0.1.5
 
 - A superseded plan comment no longer ends with the `/tofu apply <workspace>` hint; only the newest plan comment offers it.

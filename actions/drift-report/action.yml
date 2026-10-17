@@ -7,6 +7,7 @@ inputs:
     required: true
     description: "in-sync | drift | error (this run's result)"
   summary: { default: "" }
+  plan_text: { default: "", description: "the readable plan of the drift (the plan_text output of the tofu action); shown in the issue in a collapsed section" }
   branch: { default: tfpls-data }
   issues:
     description: "open and close one GitHub issue per drifted workspace (the job needs issues: write)"
@@ -29,6 +30,7 @@ runs:
         LABEL: ${{ inputs.label }}
         STATE: ${{ inputs.state }}
         SUMMARY: ${{ inputs.summary }}
+        PLAN_TEXT: ${{ inputs.plan_text }}
         BRANCH: ${{ inputs.branch }}
         ISSUES: ${{ inputs.issues }}
         TOKEN: ${{ inputs.github_token }}

@@ -82,6 +82,7 @@ jobs:
           label: ${{ matrix.label }}
           state: ${{ steps.s.outputs.state || 'error' }}
           summary: ${{ steps.t.outputs.summary }}
+          plan_text: ${{ steps.t.outputs.plan_text }}
       # alerts only on transitions (drifted, recovered, failing); when the state could not be stored (unstored) any non-clean result alerts
       - if: always()
         uses: denzhel/tfpls/actions/finish@main
