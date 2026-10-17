@@ -52,12 +52,16 @@ eq "implement: only comments start it" "$(y "$I" '.on | keys | join(",")')" "iss
 eq "elaborate: opened issues and comments start it" "$(y "$E" '.on | keys | sort | join(",")')" "issue_comment,issues"
 
 # ---- tools: elaboration is read-only; implementation cannot touch its own guards or the release path
-# the elaboration agent cannot write files, so the rules must not ask it to (the first real run on a vague issue left the body unchanged)
+# the elaboration agent writes only its body file in the runner's temp directory (a body inside a shell argument is rejected as soon as a line starts with '#')
 sec=$(sed -n '/^## Elaborating new issues/,/^## Implementing an issue/p' "$here/AGENTS.md")
-grep -q 'body-file' <<<"$sec" && grep -q 'never try `--body-file`' <<<"$sec" && ! grep -qE 'gh issue edit <n> --body-file' <<<"$sec" && ok "AGENTS.md: the elaboration passes the body as text (no --body-file)" || bad "AGENTS.md asks the elaboration for --body-file"
-grep -q 'cannot write files' <<<"$(prompt "$E")" && ok "elaborate: the prompt says it cannot write files" || bad "elaborate: prompt lacks the no-files rule"
+grep -q 'body-file' <<<"$sec" && grep -q 'Write' <<<"$sec" && ok "AGENTS.md: the elaboration writes the body file and passes --body-file" || bad "AGENTS.md: body-file rule"
+grep -qE 'Write tool to .*/body.md' <<<"$(prompt "$E")" && ok "elaborate: the prompt names the one file it may write" || bad "elaborate: prompt lacks the body file"
 ae=$(args "$E"); ai=$(args "$I")
-grep -qE 'Edit|Write|Bash\(git|Bash\(bash|gh pr create' <<<"$ae" && bad "elaborate: the agent can change files or run code" || ok "elaborate: read-only tools, plus issue edit and comment"
+grep -qE 'Edit|Bash\(git|Bash\(bash|gh pr create' <<<"$ae" && bad "elaborate: the agent can edit files or run code" || ok "elaborate: no Edit, no git, no running code"
+# Write only for the runner's temp directory (an unrestricted Write would let it change files of the checkout)
+grep -qE '(^|[,"[:space:]])Write([,"[:space:]]|$)' <<<"$ae" && bad "elaborate: an unrestricted Write is allowed" || ok "elaborate: no unrestricted Write"
+grep -qF 'Write(/${{ runner.temp }}/*)' <<<"$ae" && ok "elaborate: Write is limited to the runner's temp directory" || bad "elaborate: Write is not limited to the temp directory"
+eq "elaborate: the agent job does not persist the checkout credentials" "$(y "$E" '.jobs.agent.steps[0].with."persist-credentials"')" "false"
 grep -qF 'Bash(git push -u origin agent/*)' <<<"$ai" && ok "implement: it can push only agent/ branches" || bad "implement: push rule"
 # a rule `Bash(prefix/:*)` needs a word boundary after the prefix and never matches `prefix/file` (it denied the first real run): path-like prefixes use `*`
 grep -qE 'Bash\([^)]*/:\*\)' <<<"$ai$ae" && bad "a Bash rule ends in '/:*', which matches nothing" || ok "no Bash rule ends in '/:*' (it would deny real commands)"
