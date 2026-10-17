@@ -67,8 +67,8 @@ y "$I" '.jobs.gate.steps[] | select(.id == "g") | .env.COMMENT_BODY' | grep -qF 
 # ---- tools: elaboration is read-only; implementation cannot touch its own guards or the release path
 # the elaboration agent cannot write files, and a body passed in a shell argument is rejected when a line starts with '#': bold section titles
 sec=$(sed -n '/^## Elaborating new issues/,/^## Implementing an issue/p' "$here/AGENTS.md")
-{ grep -q 'gh issue edit <n> --body "' <<<"$sec" && grep -q 'in bold' <<<"$sec" && ! grep -q 'body-file' <<<"$sec"; } && ok "AGENTS.md: the body is passed as text with bold section titles (no files)" || bad "AGENTS.md: body rule"
-grep -q 'cannot write files' <<<"$(prompt "$E")" && grep -q 'bold' <<<"$(prompt "$E")" && ok "elaborate: the prompt says: no files, bold titles" || bad "elaborate: prompt lacks the body rule"
+{ grep -qF "gh issue edit <n> --body '" <<<"$sec" && grep -q 'single quotes' <<<"$sec" && grep -q 'in bold' <<<"$sec" && ! grep -q 'body-file' <<<"$sec"; } && ok "AGENTS.md: the body is passed as text between single quotes with bold section titles (no files)" || bad "AGENTS.md: body rule"
+grep -q 'cannot write files' <<<"$(prompt "$E")" && grep -q 'single' <<<"$(prompt "$E")" && grep -q 'bold' <<<"$(prompt "$E")" && ok "elaborate: the prompt says: no files, single quotes, bold titles" || bad "elaborate: prompt lacks the body rule"
 ae=$(args "$E"); ai=$(args "$I")
 grep -qE 'Edit|Write|Bash\(git|Bash\(bash|gh pr create' <<<"$ae" && bad "elaborate: the agent can change files or run code" || ok "elaborate: read-only tools, plus issue edit and comment"
 eq "elaborate: the agent job does not persist the checkout credentials" "$(y "$E" '.jobs.agent.steps[0].with."persist-credentials"')" "false"
