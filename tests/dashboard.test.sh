@@ -34,7 +34,7 @@ eq "last apply is the newest successful apply" "$(data | jq -r '.workspaces[]|se
 eq "issue link is built from the repo" "$(data | jq -r '.workspaces[]|select(.name=="terraform/prod")|.issue_url')" "https://github.com/o/r/issues/65"
 eq "stack comes from the workspace name" "$(data | jq -r '.workspaces[]|select(.name=="terraform/prod")|.stack')" "terraform"
 eq "feed is newest first and skips unreadable lines" "$(data | jq -r '[.events[].ts]|join(",")')" "2026-10-10T08:30:00Z,2026-10-10T08:00:00Z,2026-10-10T07:00:00Z,2026-10-10T06:00:00Z"
-eq "feed length can be limited" "$(EVENTS=2 REPO=o/r bash "$B" "$T/d" "$T/o2" >/dev/null 2>&1; sed -n '/<script id="data"/,/<\/script>/p' "$T/o2/index.html" | sed '1s/^<script[^>]*>//;$s/<\/script>$//' | jq '.events|length')" 2
+eq "feed length can be limited" "$(EVENTS=2 REPO=o/r TFPLS_NOW=2026-10-10T10:00:00Z bash "$B" "$T/d" "$T/o2" >/dev/null 2>&1; sed -n '/<script id="data"/,/<\/script>/p' "$T/o2/index.html" | sed '1s/^<script[^>]*>//;$s/<\/script>$//' | jq '.events|length')" 2
 
 eq "failed or skipped applies are not shown as the last apply" "$(data | jq -r '.workspaces[]|select(.name=="terraform/prod")|.last_apply')" "null"
 eq "an in-sync workspace shows no issue link" "$(data | jq -r '.workspaces[]|select(.name=="terraform/dev")|.issue_url')" "null"
@@ -60,13 +60,43 @@ eq "only https links are rendered (javascript: is dropped)" "$(grep -c "test(u)"
 eq "summary has a status table" "$(grep -c '^| `terraform/prod` | 🟠 drift | +0 ~1 -0' "$T/out/summary.md")" 1
 eq "summary counts" "$(sed -n 3p "$T/out/summary.md")" "4 workspaces: 1 in sync, 1 drifted, 1 failing"
 eq "empty data branch still builds" "$(mkdir -p "$T/empty"; bash "$B" "$T/empty" "$T/o3" >/dev/null 2>&1; echo $?)" 0
-eq "empty page says there is no activity" "$(grep -c 'No audit events yet' "$T/o3/index.html")" 1
+eq "empty page says there is no activity" "$(grep -c 'No audit events in the last 24 hours' "$T/o3/index.html")" 1
+
+# the feed shows only the last 24 hours before the build time
+mkdir -p "$T/win/drift" "$T/win/audit"
+cp "$T/d/drift/terraform_dev.json" "$T/win/drift/"
+cat > "$T/win/audit/2026-10.jsonl" <<'J'
+{"ts":"2026-10-09T09:59:00Z","kind":"apply","status":"applied","workspace":"terraform/dev","actor":"a","run":"https://github.com/o/r/actions/runs/20"}
+{"ts":"2026-10-09T10:01:00Z","kind":"apply","status":"applied","workspace":"terraform/dev","actor":"a","run":"https://github.com/o/r/actions/runs/21"}
+{"ts":"2026-10-10T09:00:00Z","kind":"apply","status":"failed","workspace":"terraform/dev","actor":"a","run":"https://github.com/o/r/actions/runs/22"}
+{"ts":"yesterday","kind":"apply","status":"applied","workspace":"terraform/dev","actor":"a","run":"https://github.com/o/r/actions/runs/23"}
+{"kind":"apply","status":"applied","workspace":"terraform/dev","actor":"a","run":"https://github.com/o/r/actions/runs/24"}
+J
+feed() { sed -n '/<script id="data"/,/<\/script>/p' "$1/index.html" | sed '1s/^<script[^>]*>//;$s/<\/script>$//' | jq -r "$2"; }
+REPO=o/r TFPLS_NOW=2026-10-10T10:00:00Z bash "$B" "$T/win" "$T/winout" >/dev/null 2>&1
+eq "an event 23 h 59 min old is in the feed, one 24 h 01 min old is not, newest first, bad or missing ts left out" "$(feed "$T/winout" '[.events[].ts]|join(",")')" "2026-10-10T09:00:00Z,2026-10-09T10:01:00Z"
+REPO=o/r TFPLS_NOW=2026-10-10T10:00:00Z EVENTS=1 bash "$B" "$T/win" "$T/wincap" >/dev/null 2>&1
+eq "the EVENTS cap applies on top of the window" "$(feed "$T/wincap" '[.events[].ts]|join(",")')" "2026-10-10T09:00:00Z"
+eq "the summary lists only events of the window" "$(grep -c '^- 2026-' "$T/winout/summary.md")" 2
+
+# audit history that is all older than 24 hours: empty feed, build succeeds, last apply still shown
+mkdir -p "$T/old/drift" "$T/old/audit"
+cp "$T/d/drift/terraform_dev.json" "$T/old/drift/"
+cat > "$T/old/audit/2026-10.jsonl" <<'J'
+{"ts":"2026-10-01T06:00:00Z","kind":"apply","status":"applied","workspace":"terraform/dev","actor":"a","run":"https://github.com/o/r/actions/runs/30"}
+J
+REPO=o/r TFPLS_NOW=2026-10-10T10:00:00Z bash "$B" "$T/old" "$T/oldout" >/dev/null 2>&1; rc=$?
+eq "an audit history older than 24 hours builds (exit code 0)" "$rc" 0
+eq "an audit history older than 24 hours gives an empty feed" "$(feed "$T/oldout" '.events|length')" 0
+eq "the empty page text names the 24 hours" "$(grep -c 'No audit events in the last 24 hours' "$T/oldout/index.html")" 1
+eq "the empty summary text names the 24 hours" "$(grep -c '^_No audit events in the last 24 hours\._$' "$T/oldout/summary.md")" 1
+eq "an apply older than 24 hours is still the last apply" "$(feed "$T/oldout" '.workspaces[]|select(.name=="terraform/dev")|.last_apply.run')" "https://github.com/o/r/actions/runs/30"
 
 # a large audit history must not break the page (a 128 KiB command-line argument cannot be passed to jq)
 mkdir -p "$T/big/drift" "$T/big/audit"
 cp "$T/d/drift/terraform_dev.json" "$T/big/drift/"
 for i in $(seq 1 1200); do printf '{"ts":"2026-10-%02dT06:%02d:00Z","kind":"apply","status":"applied","workspace":"terraform/dev","actor":"someone","run":"https://github.com/o/r/actions/runs/%d","reviewed":true,"counts":{"add":0,"change":1,"destroy":0,"replace":0},"duration_s":40,"via":"auto-apply"}\n' $((i%27+1)) $((i%60)) "$i"; done > "$T/big/audit/2026-10.jsonl"
-REPO=o/r TFPLS_NOW=2026-10-28T10:00:00Z EVENTS=5 bash "$B" "$T/big" "$T/bigout" >"$T/biglog" 2>&1
+REPO=o/r TFPLS_NOW=2026-10-27T10:00:00Z EVENTS=5 bash "$B" "$T/big" "$T/bigout" >"$T/biglog" 2>&1
 eq "a 400 KB audit history still builds the page" "$(sed -n '/<script id="data"/,/<\/script>/p' "$T/bigout/index.html" | sed '1s/^<script[^>]*>//;$s/<\/script>$//' | jq -r '.events | length')" 5
 
 done_tests

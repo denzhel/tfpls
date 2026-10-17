@@ -1,6 +1,6 @@
 # Dashboard
 
-One page that shows every workspace (in sync, drifted, failing), what is pending, the last successful apply, a link to the drift issue, and the latest activity from the [audit log](audit.md). It is built from the `tfpls-data` branch, so it needs a scheduled drift run ([drift](drift.md)) for the workspace table and `audit: true` for the activity feed.
+One page that shows every workspace (in sync, drifted, failing), what is pending, the last successful apply, a link to the drift issue, and the latest activity from the [audit log](audit.md) (the events of the last 24 hours before the build, newest first, at most `events` of them; the "Last apply" column is not limited to that window). It is built from the `tfpls-data` branch, so it needs a scheduled drift run ([drift](drift.md)) for the workspace table and `audit: true` for the activity feed.
 
 The page is a single self-contained HTML file: no external scripts, fonts or requests, light and dark theme, usable on a phone, filters by text, status and stack, sortable columns. Data is embedded as JSON and rendered with `textContent` only, and only `https://` links are made clickable.
 

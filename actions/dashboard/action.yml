@@ -3,7 +3,7 @@ description: Build the status dashboard (one self-contained HTML page plus a Mar
 inputs:
   branch: { default: tfpls-data }
   out: { default: tfpls-dashboard, description: "directory (relative to the workspace) that receives index.html and summary.md" }
-  events: { default: "50", description: "how many audit events the activity feed shows" }
+  events: { default: "50", description: "at most this many audit events from the last 24 hours in the activity feed" }
   github_token: { default: "${{ github.token }}" }
 outputs:
   path:
