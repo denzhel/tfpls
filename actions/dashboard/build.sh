@@ -34,28 +34,7 @@ json=$(jq -n --slurpfile dr "$dj" --slurpfile au "$aj" --arg repo "${REPO:-}" --
       + [ $applied | to_entries[] | select(.key as $k | ($drift | map(name_of) | index($k)) == null)
           | {name: .key, stack: (.key | split("/")[0]), state: "unknown", since: null, checked: null, summary: "", issue: null, issue_url: null,
              last_apply: {ts: .value.ts, status: .value.status, actor: .value.actor, run: .value.run}} ] ) as $ws
-  | ($now | fromdateiso8601) as $t
-  | ($ev | map(select((.ts | fromdateiso8601? // 0) > ($t - 30 * 86400)))) as $recent
-  | ($recent | map(select(.kind == "apply"))) as $applies
-  | ($applies | map(select(.status == "applied"))) as $ok
-  | ($applies | map(select(.status == "error" or .status == "policy-failed"))) as $failed
-  | ($ev | map(select(.kind == "apply" and .status == "applied")) | group_by(.workspace) | map({key: .[0].workspace, value: (.[0].ts | fromdateiso8601? // 0)}) | from_entries) as $lastok
-  | {generated: $now, repo: $repo, workspaces: $ws, events: $ev[0:$n],
-     insights: {
-       window_days: 30,
-       applies: (($ok | length) + ($failed | length)), applied: ($ok | length), failed: ($failed | length),
-       success_rate: (if ($ok | length) + ($failed | length) == 0 then null else ((($ok | length) * 100 / (($ok | length) + ($failed | length))) | round) end),
-       reviewed_share: (if ($ok | length) == 0 then null else (($ok | map(select(.reviewed == true)) | length) * 100 / ($ok | length) | round) end),
-       avg_apply_seconds: (($ok | map(select(.duration_s != null) | .duration_s)) | if length == 0 then null else (add / length | round) end),
-       slowest_apply: ($ok | map(select(.duration_s != null)) | sort_by(-.duration_s) | .[0] | if . then {workspace, seconds: .duration_s} else null end),
-       locks_released: ($recent | map(select(.kind == "unlock" and .status == "unlocked")) | length),
-       busiest: ($ok | group_by(.workspace) | map({workspace: .[0].workspace, applies: length}) | sort_by(-.applies) | .[0:5]),
-       unused_days: 90,
-       unused: [ $ws[] | select(.state == "in-sync") | . as $w
-                 | ($lastok[$w.name] // null) as $l
-                 | select($l == null or $l < ($t - 90 * 86400))
-                 | {workspace: .name, last_apply: (if $l == null then null else ($l | todateiso8601) end)} ]
-     }}')
+  | {generated: $now, repo: $repo, workspaces: $ws, events: $ev[0:$n]}')
 
 # the page: embedded JSON must not be able to close the script element
 printf '%s' "$json" | jq -c . | sed 's/</\\u003c/g' > "$out/data.json"   # "<" only occurs inside strings; \u003c is the same text for JSON.parse

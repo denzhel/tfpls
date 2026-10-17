@@ -40,24 +40,13 @@ eq "failed or skipped applies are not shown as the last apply" "$(data | jq -r '
 eq "an in-sync workspace shows no issue link" "$(data | jq -r '.workspaces[]|select(.name=="terraform/dev")|.issue_url')" "null"
 
 
-# insights (30 days before 2026-10-10T10:00:00Z; the fixture has 2 applied + 1 audit-only apply)
-eq "applies are counted over 30 days" "$(data | jq -c '[.insights.applies,.insights.applied,.insights.failed]')" "[3,3,0]"
-eq "success rate" "$(data | jq -r '.insights.success_rate')" 100
-eq "reviewed share counts reviewed plans among applied" "$(data | jq -r '.insights.reviewed_share')" 33
-eq "average and slowest apply duration" "$(data | jq -c '[.insights.avg_apply_seconds,.insights.slowest_apply.seconds]')" "[40,40]"
-eq "busiest workspace" "$(data | jq -r '.insights.busiest[0].workspace')" "terraform/dev"
-eq "a recently applied in-sync workspace is not unused" "$(data | jq -r '.insights.unused|length')" 0
-mkdir -p "$T/u/drift" "$T/u/audit"
-echo '{"name":"t/idle","state":"in-sync","summary":""}' > "$T/u/drift/t_idle.json"
-echo '{"name":"t/old","state":"in-sync","summary":""}' > "$T/u/drift/t_old.json"
-echo '{"name":"t/busy","state":"in-sync","summary":""}' > "$T/u/drift/t_busy.json"
-echo '{"name":"t/drifted","state":"drift","summary":""}' > "$T/u/drift/t_drifted.json"
-printf '%s\n' '{"ts":"2026-05-01T00:00:00Z","kind":"apply","status":"applied","workspace":"t/old"}' '{"ts":"2026-10-09T00:00:00Z","kind":"apply","status":"applied","workspace":"t/busy"}' '{"ts":"2026-10-09T01:00:00Z","kind":"apply","status":"error","workspace":"t/busy"}' > "$T/u/audit/2026-10.jsonl"
-REPO=o/r TFPLS_NOW=2026-10-10T10:00:00Z bash "$B" "$T/u" "$T/uo" >/dev/null 2>&1
-udata() { sed -n '/<script id="data"/,/<\/script>/p' "$T/uo/index.html" | sed '1s/^<script[^>]*>//;$s/<\/script>$//'; }
-eq "in-sync workspaces without a recent apply are listed (never applied, applied long ago)" "$(udata | jq -r '[.insights.unused[].workspace]|sort|join(",")')" "t/idle,t/old"
-eq "a drifted workspace is not called unused" "$(udata | jq -r '[.insights.unused[].workspace]|index("t/drifted")')" "null"
-eq "failed applies lower the success rate" "$(udata | jq -r '.insights.success_rate')" 50
+# the "Last 30 days" block is gone (no heading, no container, no insights in the data)
+eq "the embedded data has no insights object" "$(data | jq -r 'has("insights")')" "false"
+{ ! grep -q 'Last 30 days\|id="ins"\|insights' "$T/out/index.html"; } && ok "the page has no 'Last 30 days' block" || bad "Last 30 days block still in the page"
+grep -q 'Recent activity' "$T/out/index.html" && grep -q 'id="feed"' "$T/out/index.html" && grep -q 'data-k="name"' "$T/out/index.html" && ok "the workspace table and the recent activity feed are still there" || bad "table or feed missing"
+mkdir -p "$T/empty/drift" "$T/empty/audit"
+REPO=o/r TFPLS_NOW=2026-10-10T10:00:00Z bash "$B" "$T/empty" "$T/eo" >/dev/null 2>&1; rc=$?
+{ [ $rc -eq 0 ] && grep -q 'id="feed"' "$T/eo/index.html" && [ -s "$T/eo/summary.md" ]; } && ok "a page built from an empty data branch (no audit events) still renders (negative case)" || bad "empty data: rc=$rc"
 
 # safety: data can never break out of the script block, and the page makes no external requests
 eq "no raw < inside the data block" "$(data | grep -c '<')" 0

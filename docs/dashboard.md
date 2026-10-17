@@ -42,15 +42,3 @@ Verified: the deploy worked in a test repository (made public for a few minutes)
 
 Access control: Pages on a private repository can be limited to people with read access to the repository (Enterprise Cloud); on a public repository the page, and therefore the workspace names, drift state and run links on it, is public. The artifact and run summary are visible only to people who can read the repository.
 
-## Insights on the dashboard
-
-The dashboard's "Last 30 days" block is computed from the [audit log](audit.md), nothing else is collected:
-
-- **Applies**: applies that changed something (`applied`) and applies that failed (`error`, `policy-failed`); runs that found no changes or were held back do not count.
-- **Success rate** and **applied from a reviewed plan** (the share of successful applies that used a plan reviewed on the pull request).
-- **Average apply time** and the slowest apply (seconds the tofu step took, recorded as `duration_s` in the audit events).
-- **Locks released by name** (manual task `locks`, `/tofu unlock`): [state locks](locks.md).
-- **Busiest** workspaces by successful applies.
-- **Possibly unused**: workspaces that are in sync and have had no successful apply for 90 days. It is a prompt to look, not a verdict: a quiet production workspace is fine, an abandoned dev workspace costs money. Drifted or failing workspaces are never listed.
-
-Everything needs `audit: true` ([audit](audit.md)) to have data to show, and a scheduled drift run ([drift](drift.md)) for the workspace states.
