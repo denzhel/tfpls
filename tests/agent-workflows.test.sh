@@ -48,8 +48,21 @@ y "$E" '.jobs.gate.if' | grep -q "author_association == 'OWNER'" && ok "elaborat
 y "$E" '.jobs.gate.if' | grep -q "needs-info" && ok "elaborate: answers only on needs-info issues" || bad "elaborate: needs-info filter"
 y "$I" '.jobs.gate.if' | grep -q "comment.author_association == 'OWNER'" && ok "implement: only the owner" || bad "implement: owner filter"
 y "$I" '.jobs.gate.if' | grep -q "'/implement'" && ok "implement: the exact command" || bad "implement: command filter"
-eq "implement: only comments start it" "$(y "$I" '.on | keys | join(",")')" "issue_comment"
-eq "elaborate: opened issues and comments start it" "$(y "$E" '.on | keys | sort | join(",")')" "issue_comment,issues"
+eq "implement: comments and a manual run start it" "$(y "$I" '.on | keys | sort | join(",")')" "issue_comment,workflow_dispatch"
+eq "elaborate: opened issues, comments and a manual run start it" "$(y "$E" '.on | keys | sort | join(",")')" "issue_comment,issues,workflow_dispatch"
+# ---- manual runs from a branch (workflow_dispatch): the owner only, with an issue number, through the same gate
+for f in "$E" "$I"; do
+  n=$(basename "$f")
+  eq "$n: a manual run needs the issue number" "$(y "$f" '.on.workflow_dispatch.inputs.issue.required')" "true"
+  y "$f" '.jobs.gate.if' | grep -qF "github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner" && ok "$n: a manual run is for the owner only" || bad "$n: manual run not owner-only"
+  y "$f" '.jobs.gate.steps[] | select(.id == "g") | .env.ACTOR_ASSOC' | grep -qF "workflow_dispatch' && 'OWNER'" && ok "$n: the gate is told a manual run is the owner's (the filter checked it)" || bad "$n: ACTOR_ASSOC for dispatch"
+  for field in inputs.instructions inputs.issue; do
+    yq -r '.jobs[].steps[] | select(has("run")) | .run' "$f" | grep -q "$field" && bad "$n: $field is interpolated into a script" || true
+  done
+  ok "$n: the manual inputs never reach a run script"
+done
+eq "implement: instructions are optional" "$(y "$I" '.on.workflow_dispatch.inputs.instructions.required')" "false"
+y "$I" '.jobs.gate.steps[] | select(.id == "g") | .env.COMMENT_BODY' | grep -qF "format('/implement {0}', inputs.instructions)" && ok "implement: the instructions of a manual run go through the same /implement path" || bad "implement: instructions path"
 
 # ---- tools: elaboration is read-only; implementation cannot touch its own guards or the release path
 # the elaboration agent cannot write files, and a body passed in a shell argument is rejected when a line starts with '#': bold section titles

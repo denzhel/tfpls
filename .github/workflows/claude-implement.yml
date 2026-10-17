@@ -5,18 +5,32 @@
 # Cost: the job `if:` below costs nothing, the `gate` job (tools/agent-gate.sh) refuses in seconds (not owner, not ready, open
 # questions, kill switch, run caps), and only then the `agent` job runs, with a turn limit and a time limit.
 # Switch it off without a pull request: repository variable TFPLS_AGENT_ENABLED=false. The model: TFPLS_AGENT_MODEL_IMPLEMENT.
+# Test a change to the agent from its branch: `gh workflow run claude-implement.yml --ref <branch> -f issue=<n>` (owner only; the same gate).
 # Needs the repository secret CLAUDE_CODE_OAUTH_TOKEN and the Claude GitHub app (the pull request is opened with its token, so that
 # the required checks run on it). Rules for the agent: AGENTS.md, section "Implementing an issue".
 name: Claude implement
-run-name: implement #${{ github.event.issue.number }}
+run-name: implement #${{ github.event.issue.number || inputs.issue }}
 
 on:
   issue_comment:
     types: [created]
+  # the owner can run it by hand from any branch, to test a change to the agent before it is merged:
+  #   gh workflow run claude-implement.yml --ref <branch> -f issue=<n> [-f instructions="..."]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "number of the issue to implement (it must be labelled ready)"
+        required: true
+        type: string
+      instructions:
+        description: "optional instructions for the run (as the words after /implement)"
+        required: false
+        type: string
+        default: ""
 
 # one agent run at a time per issue, shared with claude-elaborate.yml
 concurrency:
-  group: claude-issue-${{ github.event.issue.number }}
+  group: claude-issue-${{ github.event.issue.number || inputs.issue }}
   cancel-in-progress: false
 
 permissions:
@@ -32,8 +46,12 @@ jobs:
       github.event.issue.pull_request == null &&
       github.event.sender.type != 'Bot' &&
       vars.TFPLS_AGENT_ENABLED != 'false' &&
-      github.event.comment.author_association == 'OWNER' &&
-      (github.event.comment.body == '/implement' || startsWith(github.event.comment.body, '/implement '))
+      (
+        (github.event_name == 'issue_comment' &&
+         github.event.comment.author_association == 'OWNER' &&
+         (github.event.comment.body == '/implement' || startsWith(github.event.comment.body, '/implement '))) ||
+        (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -47,11 +65,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
           EVENT_NAME: ${{ github.event_name }}
           SENDER_TYPE: ${{ github.event.sender.type }}
-          ACTOR_ASSOC: ${{ github.event.comment.author_association }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
+          ACTOR_ASSOC: ${{ github.event_name == 'workflow_dispatch' && 'OWNER' || github.event.comment.author_association }}   # a dispatch is the owner's (the filter above)
+          COMMENT_BODY: ${{ github.event.comment.body || format('/implement {0}', inputs.instructions) }}
           ENABLED: ${{ vars.TFPLS_AGENT_ENABLED }}
           MAX_IMPL_ISSUE: ${{ vars.TFPLS_AGENT_MAX_IMPL_PER_ISSUE }}
           MAX_IMPL_DAY: ${{ vars.TFPLS_AGENT_MAX_IMPL_PER_DAY }}
@@ -60,7 +78,7 @@ jobs:
         if: steps.g.outputs.comment_file != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
           FILE: ${{ steps.g.outputs.comment_file }}
         run: gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$FILE"
       # the prepared issue and the owner's words travel to the agent job as job outputs (random delimiters)
@@ -90,7 +108,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
         run: |
           if [ "$HAS_TOKEN" != true ]; then
             gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body "The issue agent did not run: the repository secret \`CLAUDE_CODE_OAUTH_TOKEN\` is not set (see CONTRIBUTING.md)." || true
@@ -122,7 +140,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Implement GitHub issue #${{ github.event.issue.number }} of ${{ github.repository }}, following the section
+            Implement GitHub issue #${{ github.event.issue.number || inputs.issue }} of ${{ github.repository }}, following the section
             "Implementing an issue" of AGENTS.md exactly (read AGENTS.md and CONTRIBUTING.md first).
             The issue is in the file ${{ runner.temp }}/issue.md (title, body and the comments of the owner,
             collaborators and our own bots); you cannot read the issue any other way. The owner's instructions for this run,
@@ -131,10 +149,10 @@ jobs:
             allowed commands.
             Use one simple command per Bash call: no pipes, no `&&` or `;`, no heredocs, no `cat`, `sed`, `head`, `python3`;
             read with Read, Grep and Glob, edit with Edit and Write (a compound or unlisted command is denied and wastes a turn).
-            Work on the branch `agent/issue-${{ github.event.issue.number }}`. Stay cheap: search with Grep and Glob before
+            Work on the branch `agent/issue-${{ github.event.issue.number || inputs.issue }}`. Stay cheap: search with Grep and Glob before
             you read a file, run only the relevant test file while you work and the whole suite once at the end, and stop
             as soon as the pull request is open. Open it with `gh pr create` using the pull request template, with the
-            TLDR (what, why, how) first, `Refs #${{ github.event.issue.number }}` (never a closing keyword), the decisions,
+            TLDR (what, why, how) first, `Refs #${{ github.event.issue.number || inputs.issue }}` (never a closing keyword), the decisions,
             the exact verification commands with their results, and an honest "not verified" list. Never merge, tag,
             release or close the issue.
           # the tool lists must be quoted: the action splits unquoted arguments on spaces
@@ -148,7 +166,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PHASE: implement
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OUTCOME: ${{ steps.claude.outcome }}

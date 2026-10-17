@@ -53,4 +53,13 @@ Both need the secret `CLAUDE_CODE_OAUTH_TOKEN` and the Claude GitHub app (as the
 
 Every run ends with one comment on the issue (turns, seconds and cost as reported by Claude Code) and a line in the run summary; a failed run is reported too, because it counts toward the caps. A failed run is never retried by itself. Set a variable with `gh variable set NAME --body VALUE --repo OWNER/REPO`.
 
+**Testing a change to the agent from its branch.** The issue and comment events always run the workflows of the default branch, so a change to the agent would have to be merged before it could be tried. The owner can run both workflows by hand from any branch instead; the run uses that branch's workflow file, gate script, prompts and tool list:
+
+```bash
+gh workflow run claude-elaborate.yml --ref <branch> -f issue=<n>
+gh workflow run claude-implement.yml --ref <branch> -f issue=<n> [-f instructions="..."]
+```
+
+A manual run goes through the same gate as the events (kill switch, caps, a trusted copy of the issue; `ready` is required for an implementation) and costs the same, so test on a throwaway issue and delete it afterwards. Only the owner can start one.
+
 Safety: only the owner starts a run, and only the words of the owner, collaborators and our own bots reach the agent (a prepared file; it cannot call `gh issue view`); its tools are an explicit list; neither workflow uses `pull_request_target`. A workflow cannot write the Project board, so the board is synced from the labels afterwards.

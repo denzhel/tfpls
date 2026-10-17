@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: the issue agent workflows can be run by hand from any branch (`gh workflow run claude-elaborate.yml --ref <branch> -f issue=<n>`), so a change to the agent is tested before it is merged. See CONTRIBUTING.md.
 - The dashboard's "Recent activity" feed (page, `tfpls-dashboard` artifact and run summary) shows only audit events from the last 24 hours before the build, at most `events` of them (default 50), instead of the newest 50 whatever their age. The "Last apply" column is unchanged.
 - Maintainers: the issue agent. Issues of the owner are elaborated automatically (questions in a comment, labels `needs-info`/`ready`), and `/implement` on a `ready` issue opens a pull request for review, with run caps, a kill switch and a cost report per run. See CONTRIBUTING.md.
 - `tools/release.sh` accepts a pre-release tag `vX.Y.Z-rc.N`: it pins the references to that exact tag and pushes only it; the major tag `v0` does not move. Maintainers test a batch on a pre-release and cut a real release once per batch; see docs/releasing.md.
