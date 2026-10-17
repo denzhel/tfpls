@@ -59,9 +59,10 @@ eq "that body has no run link and no how-to text either" "$(grep -c 'Latest run\
 [ "$(sed -n 1p "$B")" = '**`terraform/pl`** has drifted from its code.' ] && ok "the title line comes first" || bad "title line: $(sed -n 1p "$B")"
 PLAN_TEXT=$'  # aws_sqs_queue.b will be created\n\nPlan: 2 to add, 0 to change, 0 to destroy.' step terraform/pl drift 2026-10-10T11:00:00Z
 eq "a refresh of the open issue replaces the plan with the newest one" "$(grep -c 'Plan:\*\* 2 to add' "$B")|$(grep -c 'aws_sqs_queue.b' "$B")|$(grep -c 'aws_sqs_queue.a' "$B")|$(n 'issue create')" "1|1|0|1"
-BIG=$(for i in $(seq 1 6000); do echo "  # resource number $i will be created with some attribute = \"value-$i\""; done; echo "Plan: 6000 to add, 0 to change, 0 to destroy.")
+# about 80 KB: well over the 45,000-character clip, under the 128 KB limit of one environment string on Linux (the real plan_text is already clipped by the tofu action)
+BIG=$(for i in $(seq 1 1200); do echo "  # resource number $i will be created with some attribute = \"value-$i\""; done; echo "Plan: 1200 to add, 0 to change, 0 to destroy.")
 PLAN_TEXT="$BIG" step terraform/pl drift 2026-10-10T12:00:00Z
-[ "$(wc -c < "$B" | tr -d ' ')" -lt 62000 ] && grep -q '^\*\*Plan:\*\* 6000 to add' "$B" && grep -q 'bytes omitted' "$B" && grep -q '^Plan: 6000 to add' "$B" && ok "a huge plan is clipped to fit an issue; the summary line is kept" || bad "huge plan: $(wc -c < "$B") bytes"
+[ "$(wc -c < "$B" | tr -d ' ')" -lt 62000 ] && grep -q '^\*\*Plan:\*\* 1200 to add' "$B" && grep -q 'bytes omitted' "$B" && grep -q '^Plan: 1200 to add' "$B" && ok "a huge plan is clipped to fit an issue; the summary line is kept" || bad "huge plan: $(wc -c < "$B") bytes"
 PLAN_TEXT="" step terraform/pl drift 2026-10-10T13:00:00Z
 eq "an empty plan text leaves the table only (the run does not fail)" "$tr_|$(grep -c '<details>' "$B")|$(grep -c '^| Since |' "$B")" "none|0|1"
 grep -q 'tfpls_clip_plan\|tfpls_plan_line' "$R" && ok "report.sh reuses the plan-comment helpers of format.sh" || bad "helpers not reused"
