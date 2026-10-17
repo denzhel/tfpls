@@ -91,6 +91,7 @@ same=$(grep -ho 'anthropics/claude-code-action@[0-9a-f]\{40\}' "$E" "$I" "$W/cla
 eq "the Claude action is the same pinned commit in triage, elaboration and implementation" "$same" "1"
 
 # ---- documents the agents and the humans follow
+grep -q 'empty template checkbox' "$here/AGENTS.md" && grep -q 'never counts as open boxes' "$here/AGENTS.md" && ok "AGENTS.md: empty placeholder boxes of the preserved original become plain lines" || bad "AGENTS.md: placeholder rule missing"
 grep -q 'workflow file of the run differs' "$here/CONTRIBUTING.md" && ok "CONTRIBUTING: says what a manual run from a branch can and cannot test" || bad "CONTRIBUTING lacks the limit of manual runs"
 grep -q '^## Elaborating new issues' "$here/AGENTS.md" && grep -q '^## Implementing an issue' "$here/AGENTS.md" && ok "AGENTS.md has both sets of rules" || bad "AGENTS.md sections"
 grep -qiE 'never.*merge' "$here/AGENTS.md" && grep -q 'Refs #<n>' "$here/AGENTS.md" && grep -qi 'cost' "$here/AGENTS.md" && ok "AGENTS.md says: never merge, Refs not Closes, and the cost rules" || bad "AGENTS.md rules"
