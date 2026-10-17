@@ -32,3 +32,25 @@ Contributions are accepted under the same licence, certified with the [Developer
 One-time setup: `claude setup-token`, then `gh secret set CLAUDE_CODE_OAUTH_TOKEN` in this repository, and install the Claude GitHub app. Without the secret a triage run stops with a comment saying so. A user-owned GitHub Project cannot be written with the workflow's token (and no personal token is used on purpose): the board's built-in "Auto-add to project" and "Item added to project: Status Backlog" workflows put issues on it; the other columns are filled by hand.
 
 Safety: Claude can only read files and run `gh issue view/edit/comment` and `gh label list` (no raw `gh api`, no file edits, no git); issue text is data and instructions in it are ignored; the token has `issues: write` only; the action is pinned to a commit and the model is Haiku.
+
+## Issue agent (maintainers)
+
+Two workflows turn an issue of the owner into a pull request; a person reviews and merges it.
+
+1. **Elaboration** (`.github/workflows/claude-elaborate.yml`): an issue opened by the owner is rewritten into Outcome, Tasks, Acceptance criteria, Test criteria, Dependencies and Context (the original text is kept in a collapsed block). If something is unclear it asks numbered questions in one comment and labels the issue `needs-info`; the owner's or a collaborator's answer runs it again. With no open questions it labels the issue `ready`. An issue that is already elaborated (the tracker agent writes full ones) costs nothing.
+2. **Implementation** (`.github/workflows/claude-implement.yml`): the owner comments `/implement` on a `ready` issue (words after it are instructions for the run). The agent works on `agent/issue-<n>`: tests first, the change, docs and changelog, the checks, then it opens a pull request with a **TLDR (what, why, how)**, the decisions, the verification, a "not verified" list and the risks. It never merges, releases, tags or closes the issue, and cannot edit its own workflows, `tools/agent-*.sh` or `AGENTS.md`. The rules are in [AGENTS.md](AGENTS.md).
+
+Both need the secret `CLAUDE_CODE_OAUTH_TOKEN` and the Claude GitHub app (as the triage). The token is a subscription token: the usage counts against the owner's plan, so cost is controlled in four layers:
+
+| Control | What it does | Variable (default) |
+|---|---|---|
+| Free pre-filter | the job `if:` starts no runner unless the event is an owner issue, an answer on `needs-info`, or the owner's `/implement` | |
+| Gate (`tools/agent-gate.sh`) | no model run when the issue is already elaborated, not `ready`, still has questions, or the sender is a bot | |
+| Kill switch | stops both workflows at once | `TFPLS_AGENT_ENABLED` (`true`; set `false` to stop) |
+| Model | the cheapest sufficient one; triage stays on Haiku | `TFPLS_AGENT_MODEL_ELABORATE`, `TFPLS_AGENT_MODEL_IMPLEMENT` (`claude-sonnet-5-5`) |
+| Limits per run | turns and time | elaboration 30 turns / 10 min, implementation 60 turns / 30 min |
+| Run caps | the gate refuses and says so on the issue | `TFPLS_AGENT_MAX_ELAB_PER_ISSUE` (3), `TFPLS_AGENT_MAX_IMPL_PER_ISSUE` (2), `TFPLS_AGENT_MAX_ELAB_PER_DAY` (20), `TFPLS_AGENT_MAX_IMPL_PER_DAY` (5) |
+
+Every run ends with one comment on the issue (turns, seconds and cost as reported by Claude Code) and a line in the run summary; a failed run is reported too, because it counts toward the caps. A failed run is never retried by itself. Set a variable with `gh variable set NAME --body VALUE --repo OWNER/REPO`.
+
+Safety: only the owner starts a run, and only the words of the owner, collaborators and our own bots reach the agent (a prepared file; it cannot call `gh issue view`); its tools are an explicit list; neither workflow uses `pull_request_target`. A workflow cannot write the Project board, so the board is synced from the labels afterwards.
