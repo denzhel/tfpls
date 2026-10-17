@@ -147,6 +147,24 @@ grep -q "14 turns" "$T/sum" && ok "the same line goes to the run summary" || bad
 rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=failure EXEC="$T/missing.json" bash "$RP" >/dev/null 2>&1
 eq "a failed run without an execution file is still reported (it counts toward the cap)" "$(grep -c 'failure, ? turns, ? s, cost not reported' "$FX/posted.md")|$(grep -c 'tfpls-agent-run: elaborate' "$FX/posted.md")" "1|1"
 STUB_COMMENT_RC=1 env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success bash "$RP" >/dev/null 2>&1; eq "a failing comment never fails the job" "$?" "0"
+# a "success" that did nothing is never silent: denied tool calls, the agent's last words, and whether a pull request exists
+cat > "$T/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "issue comment") shift 2; while [ $# -gt 0 ]; do [ "$1" = --body ] && printf '%s' "$2" > "$FX/posted.md"; shift; done; exit 0;;
+  "pr list") [ -n "${STUB_PR:-}" ] && echo "pull request #5: https://x/pull/5"; exit 0;;
+esac
+exit 1
+STUB
+printf '%s\n' '{"type":"result","num_turns":28,"duration_ms":60000,"total_cost_usd":0.35,"result":"I could not push the branch.","permission_denials":[{"tool_name":"Bash","tool_input":{"command":"git stash"}},{"tool_name":"Write","tool_input":{"file_path":"AGENTS.md"}}]}' > "$T/exec2.json"
+rm -f "$FX/posted.md"; env PHASE=implement ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec2.json" bash "$RP" >/dev/null 2>&1
+{ grep -q '2 tool call(s) were denied' "$FX/posted.md" && grep -q '`Bash`: git stash' "$FX/posted.md" && grep -q '`Write`: AGENTS.md' "$FX/posted.md"; } && ok "the denied tool calls are listed in the report" || bad "denials: $(cat "$FX/posted.md")"
+grep -q 'No pull request was opened for this run' "$FX/posted.md" && ok "an implementation without a pull request says so" || bad "no-PR note missing"
+grep -q 'I could not push the branch' "$FX/posted.md" && ok "the agent's last words are included" || bad "last words missing"
+rm -f "$FX/posted.md"; env STUB_PR=1 PHASE=implement ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" bash "$RP" >/dev/null 2>&1
+{ grep -q 'pull request #5: https://x/pull/5' "$FX/posted.md" && ! grep -q 'No pull request' "$FX/posted.md" && ! grep -q 'denied' "$FX/posted.md"; } && ok "with a pull request the report links it and shows no denials" || bad "pr report: $(cat "$FX/posted.md")"
+rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" bash "$RP" >/dev/null 2>&1
+{ ! grep -q 'pull request' "$FX/posted.md"; } && ok "an elaboration report never talks about a pull request (negative case)" || bad "elaborate mentions a PR"
 
 # ---- usage
 bash "$G" bogus >/dev/null 2>&1; [ $? -eq 2 ] && ok "an unknown phase is a usage error" || bad "usage"
