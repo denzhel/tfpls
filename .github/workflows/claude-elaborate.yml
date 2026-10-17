@@ -5,19 +5,28 @@
 # Cost: most events never reach a model. The job `if:` below costs nothing, the `gate` job (tools/agent-gate.sh) decides
 # in seconds whether a run is needed (kill switch, already elaborated, caps), and only then the `agent` job runs.
 # Switch it off without a pull request: repository variable TFPLS_AGENT_ENABLED=false. The model: TFPLS_AGENT_MODEL_ELABORATE.
+# Test a change to the agent from its branch: `gh workflow run claude-elaborate.yml --ref <branch> -f issue=<n>` (owner only).
 # Needs the repository secret CLAUDE_CODE_OAUTH_TOKEN and the Claude GitHub app (as claude-triage.yml). Rules: AGENTS.md.
 name: Claude issue elaboration
-run-name: elaborate #${{ github.event.issue.number }}
+run-name: elaborate #${{ github.event.issue.number || inputs.issue }}
 
 on:
   issues:
     types: [opened]
   issue_comment:
     types: [created]
+  # the owner can run it by hand from any branch, to test a change to the agent before it is merged:
+  #   gh workflow run claude-elaborate.yml --ref <branch> -f issue=<n>
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "number of the issue to elaborate"
+        required: true
+        type: string
 
 # one agent run at a time per issue, shared with claude-implement.yml
 concurrency:
-  group: claude-issue-${{ github.event.issue.number }}
+  group: claude-issue-${{ github.event.issue.number || inputs.issue }}
   cancel-in-progress: false
 
 permissions:
@@ -37,7 +46,8 @@ jobs:
         (github.event_name == 'issue_comment' &&
          contains(github.event.issue.labels.*.name, 'needs-info') &&
          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-         !startsWith(github.event.comment.body, '/'))
+         !startsWith(github.event.comment.body, '/')) ||
+        (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner)
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -51,10 +61,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
           EVENT_NAME: ${{ github.event_name }}
           SENDER_TYPE: ${{ github.event.sender.type }}
-          ACTOR_ASSOC: ${{ github.event.comment.author_association }}
+          ACTOR_ASSOC: ${{ github.event_name == 'workflow_dispatch' && 'OWNER' || github.event.comment.author_association }}   # a dispatch is the owner's (the filter above)
           COMMENT_BODY: ${{ github.event.comment.body }}
           ENABLED: ${{ vars.TFPLS_AGENT_ENABLED }}
           MAX_ELAB_ISSUE: ${{ vars.TFPLS_AGENT_MAX_ELAB_PER_ISSUE }}
@@ -64,7 +74,7 @@ jobs:
         if: steps.g.outputs.comment_file != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
           FILE: ${{ steps.g.outputs.comment_file }}
         run: gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$FILE"
       # the prepared issue travels to the agent job as a job output (the delimiter is random: no line can end it early)
@@ -89,7 +99,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HAS_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
         run: |
           if [ "$HAS_TOKEN" != true ]; then
             gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body "The issue agent did not run: the repository secret \`CLAUDE_CODE_OAUTH_TOKEN\` is not set (see CONTRIBUTING.md)." || true
@@ -106,7 +116,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Elaborate GitHub issue #${{ github.event.issue.number }} of ${{ github.repository }}, following the section
+            Elaborate GitHub issue #${{ github.event.issue.number || inputs.issue }} of ${{ github.repository }}, following the section
             "Elaborating new issues" of AGENTS.md exactly (read AGENTS.md first).
             The issue is in the file ${{ runner.temp }}/issue.md. It holds the title, the body and the comments of
             the owner, collaborators and our own bots. Read that file; you cannot read the issue any other way.
@@ -130,7 +140,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PHASE: elaborate
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OUTCOME: ${{ steps.claude.outcome }}

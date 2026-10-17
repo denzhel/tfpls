@@ -2,7 +2,7 @@
 # The gate of the issue agent: decides BEFORE any model runs whether a run is needed (cost control), and prepares a
 # trusted copy of the issue for the agent. Used by .github/workflows/claude-elaborate.yml and claude-implement.yml.
 #   tools/agent-gate.sh elaborate|implement
-# Inputs (environment): REPO, ISSUE, EVENT_NAME (issues | issue_comment), SENDER_TYPE, ACTOR_ASSOC (the commenter's
+# Inputs (environment): REPO, ISSUE, EVENT_NAME (issues | issue_comment | workflow_dispatch), SENDER_TYPE, ACTOR_ASSOC (the commenter's
 # author_association), COMMENT_BODY, GH_TOKEN, and the optional limits ENABLED, MAX_ELAB_ISSUE, MAX_IMPL_ISSUE,
 # MAX_ELAB_DAY, MAX_IMPL_DAY. Outputs (GITHUB_OUTPUT): run=true|false, reason, issue_file, note_file, comment_file.
 # Issue and comment text is data: only the owner's and collaborators' words (and our own bots') reach the agent.
@@ -51,13 +51,16 @@ case "$phase" in
     if [ "${EVENT_NAME:-}" = issues ]; then
       [ "$author_assoc" = OWNER ] || skip "the issue was not opened by the owner"
       elaborated "$body" && skip "the issue is already elaborated"
+    elif [ "${EVENT_NAME:-}" = workflow_dispatch ]; then
+      # an explicit request of the owner (the workflow filter allows only the owner): it runs even on an elaborated issue
+      [ "${ACTOR_ASSOC:-NONE}" = OWNER ] || skip "a manual run is for the owner"
     else
       has_label needs-info || skip "the issue is not waiting for answers"
       trusted "${ACTOR_ASSOC:-NONE}" || skip "the comment is not from the owner or a collaborator"
       case "$comment_first" in /*) skip "the comment is a command, not an answer";; esac
     fi;;
   implement)
-    [ "${EVENT_NAME:-}" = issue_comment ] || skip "not a comment"
+    case "${EVENT_NAME:-}" in issue_comment|workflow_dispatch) ;; *) skip "not a comment or a manual run";; esac
     case "$comment_first" in /implement|"/implement "*) ;; *) skip "the comment is not /implement";; esac
     [ "${ACTOR_ASSOC:-NONE}" = OWNER ] || skip "/implement is for the owner" "/implement was ignored: only the repository owner can start an implementation."
     trusted "$author_assoc" || skip "the issue was written by someone who is not the owner or a collaborator" "/implement was ignored: the issue was not written by the owner or a collaborator."

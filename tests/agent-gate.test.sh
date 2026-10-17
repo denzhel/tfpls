@@ -120,6 +120,28 @@ echo '{"workflow_runs":[{"id":21},{"id":22},{"id":23},{"id":24},{"id":25}]}' > "
 for i in 21 22 23 24 25; do echo '{"jobs":[{"name":"agent","conclusion":"success"}]}' > "$FX/jobs-$i.json"; done
 gate implement EVENT_NAME=issue_comment ACTOR_ASSOC=OWNER COMMENT_BODY="/implement"; case "$reason" in "the daily cap is reached (5 of 5 implement runs in 24 hours)") ok "five implementation runs in 24 hours stop the next (daily cap)";; *) bad "implement daily cap: $run $reason";; esac
 
+# ---- manual runs (workflow_dispatch): the owner tests a change to the agent from its branch
+reset; issue OWNER "" "$FULL"
+gate elaborate EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER; eq "a manual elaboration runs even on an already elaborated issue (an explicit request)" "$run" "true"
+gate elaborate EVENT_NAME=workflow_dispatch ACTOR_ASSOC=COLLABORATOR; eq "a manual run by anyone but the owner starts nothing" "$run|$reason" "false|a manual run is for the owner"
+gate elaborate EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER ENABLED=false; eq "the kill switch stops a manual run too" "$run" "false"
+M=$(c claude Bot NONE $'x\n<!-- tfpls-agent-run: elaborate -->'); comments "[$M,$M,$M]"
+gate elaborate EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER; eq "the per-issue cap applies to a manual run (negative case)" "$run" "false"
+comments '[]'
+issue OWNER "" "$FULL"; gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement "
+eq "a manual implementation on a not-ready issue is refused like /implement" "$run" "false"
+grep -q "not labelled" "$T/w/gate-comment.md" && ok "and the issue says what is missing" || bad "manual not-ready comment"
+issue OWNER ready "$FULL"; gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement "
+eq "a manual implementation on a ready issue runs" "$run" "true"
+gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement keep the diff small"
+[ "$run" = true ] && grep -q "keep the diff small" "$T/w/implement-note.md" && ok "the instructions of a manual run reach the agent as the owner's note" || bad "manual note"
+gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement " ENABLED=false; eq "the kill switch stops a manual implementation" "$run" "false"
+gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=NONE COMMENT_BODY="/implement "; eq "a manual implementation by anyone but the owner is refused" "$run" "false"
+gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement " SENDER_TYPE=Bot; eq "a bot cannot start a manual run" "$run" "false"
+I=$(c claude Bot NONE $'x\n<!-- tfpls-agent-run: implement -->'); comments "[$I,$I]"
+gate implement EVENT_NAME=workflow_dispatch ACTOR_ASSOC=OWNER COMMENT_BODY="/implement "; eq "the per-issue cap applies to a manual implementation" "$run" "false"
+comments '[]'
+
 # ---- the trusted copy: text of strangers never reaches the agent
 reset; issue OWNER needs-info "$FULL"
 O=$(c owner User OWNER "The owner's answer: use Sonnet.")
@@ -148,7 +170,7 @@ rm -f "$FX/posted.md"; env PHASE=implement ISSUE=7 REPO=o/r RUN_URL=http://run O
 eq "the report is posted with turns, seconds, cost and the cap marker" "$rc|$(grep -c '14 turns, 183 s, cost 0.46 USD' "$FX/posted.md")|$(grep -c '<!-- tfpls-agent-run: implement -->' "$FX/posted.md")" "0|1|1"
 grep -q "14 turns" "$T/sum" && ok "the same line goes to the run summary" || bad "summary line"
 rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=failure EXEC="$T/missing.json" bash "$RP" >/dev/null 2>&1
-eq "a failed run without an execution file is still reported (it counts toward the cap)" "$(grep -c 'failure, ? turns, ? s, cost not reported' "$FX/posted.md")|$(grep -c 'tfpls-agent-run: elaborate' "$FX/posted.md")" "1|1"
+eq "a run without an execution file says the agent produced no result and still counts toward the cap" "$(grep -c 'the agent produced no result' "$FX/posted.md")|$(grep -c 'failure' "$FX/posted.md")|$(grep -c 'tfpls-agent-run: elaborate' "$FX/posted.md")" "1|1|1"
 STUB_COMMENT_RC=1 env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success bash "$RP" >/dev/null 2>&1; eq "a failing comment never fails the job" "$?" "0"
 # a "success" that did nothing is never silent: denied tool calls, the agent's last words, and whether a pull request exists
 cat > "$T/bin/gh" <<'STUB'

@@ -16,6 +16,12 @@ secs=$(jq -r 'if .duration_ms then ((.duration_ms / 1000) | round) else "?" end'
 cost=$(jq -r 'if .total_cost_usd then (.total_cost_usd * 100 | round / 100 | tostring) else "not reported" end' <<<"$res" 2>/dev/null || echo "not reported")
 outcome=${OUTCOME:-unknown}
 line="Agent run (${PHASE}): ${outcome}, ${turns} turns, ${secs} s, cost ${cost}$([ "$cost" != "not reported" ] && echo " USD")"
+if [ "$res" = null ]; then
+  # no result record at all: the agent did not run (a green job can hide that). The Claude action skips itself, with a warning in its
+  # log, when the workflow file of the run differs from the one on the default branch (a security check that also hits a manual run from
+  # a branch that changed the workflow file) or when it cannot start.
+  line="Agent run (${PHASE}): ${outcome}, **the agent produced no result** (no execution record; the Claude action may have skipped itself, see the run log)"
+fi
 [ -n "${RUN_URL:-}" ] && line="$line ([run](${RUN_URL}))"
 
 # what went wrong or was left undone, so that a "success" without a result is never silent: the tool calls that were denied
