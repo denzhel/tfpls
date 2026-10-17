@@ -4,7 +4,7 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
-## Unreleased
+## v0.2.0
 
 - Maintainers: the issue agent workflows can be run by hand from any branch (`gh workflow run claude-elaborate.yml --ref <branch> -f issue=<n>`), so a change to the agent is tested before it is merged. See CONTRIBUTING.md.
 - The dashboard's "Recent activity" feed (page, `tfpls-dashboard` artifact and run summary) shows only audit events from the last 24 hours before the build, at most `events` of them (default 50), instead of the newest 50 whatever their age. The "Last apply" column is unchanged.
