@@ -52,6 +52,10 @@ eq "implement: only comments start it" "$(y "$I" '.on | keys | join(",")')" "iss
 eq "elaborate: opened issues and comments start it" "$(y "$E" '.on | keys | sort | join(",")')" "issue_comment,issues"
 
 # ---- tools: elaboration is read-only; implementation cannot touch its own guards or the release path
+# the elaboration agent cannot write files, so the rules must not ask it to (the first real run on a vague issue left the body unchanged)
+sec=$(sed -n '/^## Elaborating new issues/,/^## Implementing an issue/p' "$here/AGENTS.md")
+grep -q 'body-file' <<<"$sec" && grep -q 'never try `--body-file`' <<<"$sec" && ! grep -qE 'gh issue edit <n> --body-file' <<<"$sec" && ok "AGENTS.md: the elaboration passes the body as text (no --body-file)" || bad "AGENTS.md asks the elaboration for --body-file"
+grep -q 'cannot write files' <<<"$(prompt "$E")" && ok "elaborate: the prompt says it cannot write files" || bad "elaborate: prompt lacks the no-files rule"
 ae=$(args "$E"); ai=$(args "$I")
 grep -qE 'Edit|Write|Bash\(git|Bash\(bash|gh pr create' <<<"$ae" && bad "elaborate: the agent can change files or run code" || ok "elaborate: read-only tools, plus issue edit and comment"
 grep -qF 'Bash(git push -u origin agent/*)' <<<"$ai" && ok "implement: it can push only agent/ branches" || bad "implement: push rule"
