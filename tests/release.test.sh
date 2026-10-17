@@ -37,12 +37,14 @@ out=$(cd "$T/clone" && bash tools/release.sh --dry-run v9.9.9 2>&1)
 case "$out" in *"stays where it is"*) bad "a plain release claims the major tag stays";; *) ok "a plain release does not claim that (negative case)";; esac
 
 # real runs against a local bare "origin" (relative URL = the slug, so the script derives it like for GitHub)
-git clone -q "$here" "$T/real" && git -C "$T/real" checkout -q -B main
+# a fresh repository made from the working tree (a clone of a shallow checkout, as in CI, cannot be pushed from)
+mkdir -p "$T/real" && ( cd "$here" && git archive HEAD | tar -x -C "$T/real" )
 ( cd "$here" && git ls-files -m -o --exclude-standard | while read -r f; do mkdir -p "$T/real/$(dirname "$f")"; cp "$f" "$T/real/$f" 2>/dev/null || true; done )
+git -C "$T/real" init -q && git -C "$T/real" checkout -q -B main
 mkdir -p "$T/real/$slug" && git init -q --bare "$T/real/$slug" && echo "${slug%%/*}/" >> "$T/real/.git/info/exclude"
 G() { git -C "$T/real" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
 G add -A >/dev/null; G commit -qm wip --allow-empty
-G remote set-url origin "$slug"
+G remote add origin "$slug"
 G config remote.origin.pushurl "$T/real/$slug"   # the script pushes from a temporary worktree: an absolute push URL; the relative fetch URL is what it derives the slug from
 G push -q origin main && G tag v9 && G push -q origin refs/tags/v9
 v9_before=$(git --git-dir="$T/real/$slug" rev-parse v9)
