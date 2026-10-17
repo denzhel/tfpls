@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { persist-credentials: false }
       - id: d
-        uses: denzhel/tfpls/actions/detect-workspaces@main
+        uses: denzhel/tfpls/actions/detect-workspaces@v0.2.0-rc.1
         with: { config: "${{ inputs.config }}", mode: all }
 
   drift:
@@ -50,14 +50,14 @@ jobs:
       group: tfpls-${{ github.repository }}-${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate == 'never' || fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate == '') && '-drift' || '' }}
       cancel-in-progress: false
     steps:
-      - uses: denzhel/tfpls/actions/prepare@main
+      - uses: denzhel/tfpls/actions/prepare@v0.2.0-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           tofu_version: ${{ inputs.tofu_version }}
           role_arn: ${{ vars.TFPLS_ROLE_ARN }}
           json: ${{ secrets.TFPLS_ENV_JSON }}
       - id: t
-        uses: denzhel/tfpls/actions/tofu@main
+        uses: denzhel/tfpls/actions/tofu@v0.2.0-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           auto_apply: ${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate || 'never') }}
@@ -75,7 +75,7 @@ jobs:
       # always: the drift state on the data branch feeds the dashboard and the alerts (transitions); drift_issues only decides about the issues
       - id: tr
         if: always()
-        uses: denzhel/tfpls/actions/drift-report@main
+        uses: denzhel/tfpls/actions/drift-report@v0.2.0-rc.1
         with:
           issues: ${{ inputs.drift_issues }}
           name: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}
@@ -85,7 +85,7 @@ jobs:
           plan_text: ${{ steps.t.outputs.plan_text }}
       # alerts only on transitions (drifted, recovered, failing); when the state could not be stored (unstored) any non-clean result alerts
       - if: always()
-        uses: denzhel/tfpls/actions/finish@main
+        uses: denzhel/tfpls/actions/finish@v0.2.0-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           label: ${{ matrix.label }}
