@@ -17,7 +17,7 @@
 
 ## Releases
 
-Semantic versioning: breaking changes to inputs, config keys or behaviour callers rely on bump the major version. `tools/release.sh` cuts a release and moves the major tag; see [docs/releasing.md](docs/releasing.md).
+Semantic versioning: breaking changes to inputs, config keys or behaviour callers rely on bump the major version. Release once per batch of changes, testing it first on a pre-release tag (`vX.Y.Z-rc.N`, which does not move `v0`); see [docs/releasing.md](docs/releasing.md#for-maintainers-when-to-release). `tools/release.sh` cuts a release and moves the major tag; see [docs/releasing.md](docs/releasing.md).
 
 ## Licence and sign-off
 

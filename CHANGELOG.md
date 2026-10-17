@@ -4,6 +4,10 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
+## Unreleased
+
+- `tools/release.sh` accepts a pre-release tag `vX.Y.Z-rc.N`: it pins the references to that exact tag and pushes only it; the major tag `v0` does not move. Maintainers test a batch on a pre-release and cut a real release once per batch; see docs/releasing.md.
+
 ## v0.1.7
 
 - The dashboard no longer has the "Last 30 days" block (applies, success rate, durations, locks, busiest, possibly unused workspaces). The workspace table and the recent activity feed stay.
