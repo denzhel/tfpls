@@ -35,11 +35,11 @@ For a repository with one root module and a folder per workspace (`workspaces/de
    ```sh
    curl -fsSL https://raw.githubusercontent.com/denzhel/tfpls/v0/tools/onboard | bash
    ```
-   Pass flags as `| bash -s -- --create-workspaces` if the workspaces do not exist in your state yet (first run only).
-2. **One IAM role** that GitHub can assume through OIDC (the onboarding prints the trust policy), then:
+2. **One AWS role.** On GitHub-hosted runners, create the GitHub OIDC provider and one IAM role that trusts your repository (the onboarding prints the trust policy), then:
    ```sh
    gh variable set TFPLS_ROLE_ARN --body arn:aws:iam::<account>:role/<role>
    ```
+   On self-hosted runners that already have an AWS identity (an instance profile, or an EKS service account annotated with an IAM role), skip this: the jobs use the runner's own credentials. We have not tested that path, so try it on a throwaway workspace. Details and other options: [credentials](docs/credentials.md).
 3. **Encrypt saved plans** (required on public repositories):
    ```sh
    openssl rand -base64 32 | gh secret set PLAN_ENCRYPTION_KEY
