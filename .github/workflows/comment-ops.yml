@@ -118,7 +118,7 @@ jobs:
           ref: ${{ steps.p.outputs.cmd == 'unlock' && github.event.repository.default_branch || steps.p.outputs.sha }}
           fetch-depth: 0
       - id: d
-        uses: denzhel/tfpls/actions/detect-workspaces@main
+        uses: denzhel/tfpls/actions/detect-workspaces@v0.3.0
         with:
           config: ${{ inputs.config }}
           mode: changed
@@ -129,7 +129,7 @@ jobs:
       - name: Approvals
         id: a
         if: steps.p.outputs.cmd == 'apply' && steps.d.outputs.any == 'true'
-        uses: denzhel/tfpls/actions/approvals@main
+        uses: denzhel/tfpls/actions/approvals@v0.3.0
         with:
           enforce: ${{ steps.p.outputs.now != 'true' }}   # --now by an admin: the rules (policy settings) are still read from the default branch, the approvals are not checked
           entries: ${{ steps.d.outputs.entries }}
@@ -141,7 +141,7 @@ jobs:
 
       - name: CODEOWNERS approvals
         if: steps.a.outputs.codeowners == 'true' && steps.p.outputs.cmd == 'apply' && steps.p.outputs.now != 'true' && steps.d.outputs.any == 'true'
-        uses: denzhel/tfpls/actions/codeowners@main
+        uses: denzhel/tfpls/actions/codeowners@v0.3.0
         with:
           entries: ${{ steps.a.outputs.owner_entries }}
           sha: ${{ steps.p.outputs.sha }}
@@ -190,7 +190,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - if: inputs.queue && needs.parse.outputs.cmd == 'apply'
-        uses: denzhel/tfpls/actions/queue@main
+        uses: denzhel/tfpls/actions/queue@v0.3.0
         with:
           mode: enter
           name: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
@@ -198,11 +198,11 @@ jobs:
           pr_number: ${{ github.event.issue.number }}
           timeout_minutes: ${{ inputs.timeout_minutes }}
       # `after:` in the config: when several workspaces are applied together, wait for their predecessors
-      - uses: denzhel/tfpls/actions/wait-for@main
+      - uses: denzhel/tfpls/actions/wait-for@v0.3.0
         with:
           jobs: ${{ needs.parse.outputs.cmd == 'apply' && fromJSON(needs.parse.outputs.entries)[matrix.label].wait_for || '' }}
           timeout_minutes: ${{ inputs.timeout_minutes }}
-      - uses: denzhel/tfpls/actions/prepare@main
+      - uses: denzhel/tfpls/actions/prepare@v0.3.0
         with:
           entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
           ref: ${{ needs.parse.outputs.cmd == 'unlock' && github.event.repository.default_branch || needs.parse.outputs.sha }}
@@ -212,7 +212,7 @@ jobs:
           json: ${{ secrets.TFPLS_ENV_JSON }}
       - id: t
         if: needs.parse.outputs.cmd != 'unlock'
-        uses: denzhel/tfpls/actions/tofu@main
+        uses: denzhel/tfpls/actions/tofu@v0.3.0
         with:
           entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
           targets: ${{ needs.parse.outputs.targets }}
@@ -226,7 +226,7 @@ jobs:
           allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       - id: u
         if: needs.parse.outputs.cmd == 'unlock'
-        uses: denzhel/tfpls/actions/unlock@main
+        uses: denzhel/tfpls/actions/unlock@v0.3.0
         with:
           name: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
           label: ${{ matrix.label }}
@@ -234,7 +234,7 @@ jobs:
           workspace: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].workspace }}
           pr_number: ${{ github.event.issue.number }}
       - if: always() && inputs.audit && needs.parse.outputs.cmd == 'unlock'
-        uses: denzhel/tfpls/actions/record@main
+        uses: denzhel/tfpls/actions/record@v0.3.0
         with:
           workspace: ${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
           kind: unlock
@@ -243,7 +243,7 @@ jobs:
           via: comment
           pr: ${{ github.event.issue.number }}
       - if: always() && needs.parse.outputs.cmd == 'apply'
-        uses: denzhel/tfpls/actions/finish@main
+        uses: denzhel/tfpls/actions/finish@v0.3.0
         with:
           entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
           label: ${{ matrix.label }}
