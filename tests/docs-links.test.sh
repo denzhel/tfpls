@@ -13,4 +13,12 @@ for f in README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md docs/*.md; do
   done < <(grep -oE '\]\([^)]+\)' "$f" | sed -E 's/^\]\(//; s/\)$//' | grep -vE '^`')
 done
 echo "ok   $pass relative links resolve"
+# the README opens with the hero image, and the file is a self-contained SVG (no script, no external reference)
+svg=docs/assets/tfpls-hero.svg
+if grep -q 'docs/assets/tfpls-hero.svg' README.md && [ -s "$svg" ] \
+   && ! grep -qiE '<script|@import|(href|src)=|url\((["'"'"']?)https?:' "$svg"; then
+  pass=$((pass+1)); echo "ok   the README hero image exists and is self-contained"
+else
+  failn=$((failn+1)); echo "FAIL the README hero image is missing or not self-contained"
+fi
 echo; echo "$pass passed, $failn failed"; [ "$failn" -eq 0 ]
