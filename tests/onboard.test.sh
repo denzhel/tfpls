@@ -47,10 +47,9 @@ grep -q '! .*only comments' <<<"$out" && ! grep -q '✔ .tfpls.yml' <<<"$out" &&
 # the push trigger names the default branch even when onboarding runs on a feature branch
 git init -q -b main "$t/fb"; mkdir -p "$t/fb/workspaces/dev"; git -C "$t/fb" -c user.email=a@b -c user.name=a commit -q --allow-empty -m x; git -C "$t/fb" checkout -q -b add-pipeline
 "$init" "$t/fb" >/dev/null; eq "a feature branch does not become the push trigger" "$(yq -r '.on.push.branches[0]' "$t/fb/.github/workflows/tofu.yml")" main
-# --create-workspaces
-out=$("$init" --force --create-workspaces "$t/fb"); eq "--create-workspaces writes the first-run setting" "$(yq -r .defaults.create_workspace "$t/fb/.tfpls.yml")" true
-eq "that config is valid" "$(valid "$t/fb/.tfpls.yml")" "[]"
-out=$("$init" --force "$t/v"); grep -q -e '--create-workspaces' <<<"$out" && ok "the first-run hint for named workspaces" || bad "hint"
+# --create-workspaces was removed: an unknown option, and the hint names the manual step
+out=$("$init" --force --create-workspaces "$t/fb" 2>&1); rc=$?; [ $rc -eq 2 ] && grep -q 'unknown option: --create-workspaces' <<<"$out" && ok "--create-workspaces is rejected" || bad "flag: rc=$rc $out"
+out=$("$init" --force "$t/v"); grep -q 'tofu workspace new' <<<"$out" && ! grep -q -e '--create-workspaces' <<<"$out" && ok "the hint for missing workspaces names tofu workspace new" || bad "hint"
 
 # a hostile remote is never echoed, names are validated
 mkdir -p "$t/r/workspaces/dev"; git init -q "$t/r"; git -C "$t/r" remote add origin 'https://github.com/x/$(touch pwned);y'

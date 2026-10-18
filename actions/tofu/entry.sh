@@ -19,7 +19,6 @@ VAR_FILE var_file
 PARALLELISM parallelism
 PLAN_LOCK plan_lock
 LOCK_TIMEOUT lock_timeout
-CREATE_WS create_workspace
 AUTO_APPLY auto_apply
 POLICY_DIR policy_dir
 POLICY_PACKS policy_packs

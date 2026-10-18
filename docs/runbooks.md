@@ -8,7 +8,7 @@ What a first pull request shows and what to do. Everything is explained on the p
 - **A note that no workspaces were found**: the layout is not `workspaces/<name>/`. Run `tools/onboard` again (it writes the `stacks:` block for var-file and `envs/<name>` layouts) or see [getting started](getting-started.md#another-layout).
 - **A 🔑 comment that the role could not be assumed** (STS `AccessDenied`): put the subject the comment shows into the role's trust policy (both forms, `repo:OWNER/REPO:*` and `repo:OWNER@*/REPO@*:*`), check the variable `TFPLS_ROLE_ARN`, run the job again. The comment never shows the role ARN or AWS's message; the run log has the details.
 - **A warning that an override matches nothing**: the key matches a workspace name or a stack name (glob allowed); a typo is the usual cause.
-- **"set create_workspace: true to create it"**: the tofu workspace does not exist yet. Put `defaults: { create_workspace: true }` in the config for the first run and remove it afterwards, so a typo can never create empty state.
+- **"workspace ... does not exist: create it once with `tofu workspace new <name>`"**: the tofu workspace does not exist yet. Create it once by hand in the directory the message names (`tofu init` and `tofu workspace new <name>`, with the same backend and credentials); tfpls never creates workspaces, so a typo can never create empty state. The key `create_workspace` was removed: delete it from `.tfpls.yml`.
 - **Apply refused with no one to approve**: working alone, set the ruleset's required approvals to 0, or, as a repository admin, comment `/tofu apply <workspace> --now` ([approvals](approvals.md)).
 
 ## A plan or apply fails with "Error acquiring the state lock"

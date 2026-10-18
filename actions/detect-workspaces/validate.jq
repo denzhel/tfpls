@@ -20,7 +20,9 @@ def strlist($v; $path):
 def check_setting($k; $v; $path):
   if $k == "auto_apply" then
     (if ($v | type) == "string" and ($v | IN("never","always","additive_only")) then [] else [err($path; "must be never, always or additive_only")] end)
-  elif ($k | IN("create_workspace","require_reviewed_plan","plan_lock","drift_fix")) then
+  elif $k == "create_workspace" then
+    [err($path; "was removed: tfpls never creates a tofu workspace. Create it once with `tofu workspace new <name>` and delete this key")]
+  elif ($k | IN("require_reviewed_plan","plan_lock","drift_fix")) then
     (if ($v | type) == "boolean" then [] else [err($path; "must be true or false (without quotes)")] end)
   elif $k == "parallelism" then
     (if ($v | type) == "number" and $v >= 1 and $v == ($v | floor) then [] else [err($path; "must be a whole number of 1 or more")] end)

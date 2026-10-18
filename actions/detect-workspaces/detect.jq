@@ -82,7 +82,6 @@ def entries($defaults; $changed):
         policy_packs: (($m.policy_packs // []) | if type == "array" then join(",") else . end),
         var_file: (($m.var_file // "") | gsub("\\{workspace\\}"; ($w // ""))),
         parallelism: (($m.parallelism // 10) | tostring),
-        create_workspace: (($m.create_workspace // false) | tostring),
         plan_lock: ((if $m.plan_lock == null then false else $m.plan_lock end) | tostring),  # not `// true`: jq treats false as empty
         drift_fix: ((if $m.drift_fix == null then true else $m.drift_fix end) | tostring),
         lock_timeout: (($m.lock_timeout // "2m") | tostring),

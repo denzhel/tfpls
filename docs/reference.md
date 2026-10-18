@@ -9,7 +9,6 @@ Every setting, command and input. For a first setup read [getting started](getti
 ```yaml
 defaults:
   auto_apply: never            # never | always | additive_only
-  create_workspace: false      # first run only: a typo must not create new state
 stacks:
   - name: terraform
     dir: .                     # the root module
@@ -44,7 +43,6 @@ Job titles, PR comment headings and Slack messages use just the workspace name (
 | `ignore` | none | Globs (`*`, `?`) of files that never trigger anything |
 | `watch` | none | Extra paths treated as shared changes |
 | `auto_apply` | `never` | After merge: `never`, `always`, or `additive_only` |
-| `create_workspace` | `false` | Create the tofu workspace when missing |
 | `plan_lock` | `false` | `false` = plans that will never be applied (PR plans, `/tofu plan`, drift reports) run with `-lock=false`, so they never block an apply; `true` = they take the state lock |
 | `lock_timeout` | `2m` | how long plans and applies wait for a held state lock (`-lock-timeout`), e.g. `30s`, `5m` |
 | `var_file` | none | `-var-file`, `{workspace}` is substituted |
@@ -65,6 +63,8 @@ Job titles, PR comment headings and Slack messages use just the workspace name (
 ## Removed settings
 
 `approvals`, the `require_codeowners` input and the `badges` input were removed in v0.9.0: the number of approvals and the CODEOWNERS requirement come from your repository's ruleset ([approvals.md](approvals.md)), and the badges feature is gone. A config that still has `approvals:` is an error that says so.
+
+`create_workspace` and `tools/onboard --create-workspaces` were removed: tfpls never creates a tofu workspace. Create each one once with `tofu workspace new <name>`; a config that still has `create_workspace` is an error that says so.
 
 ## PR commands
 

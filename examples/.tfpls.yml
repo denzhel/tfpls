@@ -1,6 +1,5 @@
 defaults:
   auto_apply: never
-  create_workspace: true      # first run only: lets the first plan create a missing tofu workspace; leave it out afterwards
 stacks:
   - name: terraform
     dir: .

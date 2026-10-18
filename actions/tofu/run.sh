@@ -109,11 +109,7 @@ tofu init -input=false -no-color > init.txt 2>&1 || {
 }
 if [ -n "$WS" ]; then
   if ! tofu workspace select "$WS" >/dev/null 2>&1; then
-    if [ "${CREATE_WS:-false}" = true ]; then
-      tofu workspace new "$WS" >/dev/null || { summary="workspace create failed"; finish; }
-    else
-      summary="workspace \`$WS\` does not exist (set create_workspace: true to create it)"; finish
-    fi
+    summary="workspace \`$WS\` does not exist: create it once with \`tofu workspace new $WS\` in \`$DIR\` (tfpls never creates workspaces)"; finish
   fi
 fi
 
