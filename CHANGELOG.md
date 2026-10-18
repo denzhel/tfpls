@@ -4,7 +4,7 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
-## Unreleased
+## v0.3.0
 
 - **Removed (breaking in 0.x):** `create_workspace` and `tools/onboard --create-workspaces`. tfpls never creates a tofu workspace: a missing one fails the plan with a message that says to create it once with `tofu workspace new <name>`, and a config that still sets `create_workspace` fails validation. Delete the key from `.tfpls.yml`.
 
