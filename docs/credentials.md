@@ -22,6 +22,12 @@ The role comes from the variable `TFPLS_ROLE_ARN` (an Environment variable of th
 
 Every job logs `credentials: env | oidc | none` and writes it to the job summary. Secret values are masked in logs; labels (`TFPLS_*`), `*_REGION` keys and values shorter than 6 characters are not.
 
+## Self-hosted runners with their own AWS identity (not yet tested)
+
+If the runner already has AWS credentials, you can skip OIDC: set neither `TFPLS_ROLE_ARN` nor `TFPLS_ENV_JSON`. The job logs `credentials: none` and `tofu` uses the standard AWS credential chain, so whatever the runner provides is used: an instance profile, or on EKS a Kubernetes service account annotated with an IAM role (IRSA, or EKS Pod Identity). That role needs what is described below, and the same warning applies: the plan runs the code of the pull request, so it runs with that identity.
+
+**Not verified.** tfpls has only been run against real AWS through GitHub OIDC on GitHub-hosted runners. This path rests on how the AWS SDK finds credentials; nothing in this repository has run it on a real runner yet. Try it on a throwaway workspace first, and please report what you see.
+
 ## What the role needs
 
 Whatever your configuration needs to plan and apply: access to the S3 state and its lock object, and the permissions of the resources you manage. tfpls does not narrow it.
