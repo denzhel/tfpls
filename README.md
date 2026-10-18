@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/tfpls-hero.svg" alt="tfpls: an unimpressed tofu holding a sign that says please, with the words plan, lock and ship. TF, please." width="720">
+  <img src="docs/assets/tfpls-hero.svg" alt="tfpls: a git diff that removes hope and adds a plan someone read. Commit message: grow up. TF, please." width="720">
 </p>
 
 **Plan on every pull request. Apply with one comment.** Revolutionary, we know: you look at the plan *before* you apply it. tfpls is OpenTofu on GitHub Actions for AWS and S3 state: reusable workflows that run in your repository, on your Actions minutes. Nothing to host, no server of ours in the path.
