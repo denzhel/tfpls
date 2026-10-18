@@ -2,7 +2,7 @@ name: tofu plan/apply
 description: Plan (and optionally apply) one workspace, with policy check, plan classification and sticky PR comment
 inputs:
   entry:
-    description: "the matrix entry of this workspace as JSON (toJSON(fromJSON(entries)[matrix.label]) from detect-workspaces): name, label, dir, workspace, var_file, parallelism, plan_lock, lock_timeout, create_workspace, auto_apply, policy_dir, policy_packs and policy_params come from it"
+    description: "the matrix entry of this workspace as JSON (toJSON(fromJSON(entries)[matrix.label]) from detect-workspaces): name, label, dir, workspace, var_file, parallelism, plan_lock, lock_timeout, auto_apply, policy_dir, policy_packs and policy_params come from it"
     default: ""
   targets:
     description: Space-separated -target addresses (validated)

@@ -13,7 +13,7 @@
 | `tofu apply -target=module.vpc` | `/tofu apply prod -target=module.vpc` |
 | `tofu force-unlock <id>` | `/tofu unlock prod` |
 | "did anyone change prod by hand?" | `drift.yml` |
-| `workspace new` | add the directory; `create_workspace: true` for the first run only |
+| `workspace new` | add the directory, and create the tofu workspace once by hand (`tofu workspace new <name>`) |
 
 4. **Rollout plan**
    1. Run `tools/onboard` and open ONE pull request: it plans every workspace. Open a few more PRs and compare the comments with your own `tofu plan` output.

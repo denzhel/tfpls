@@ -22,7 +22,7 @@ check "the shipped example is clean"            "$(cat "$here/examples/.tfpls.ym
 check "an approvals block was removed in v0.9.0" $'defaults:\n  approvals: { mode: strict, required: 2 }\nstacks:\n  - name: s\n    workspaces: [a]' error "was removed in v0.9.0"
 check "a minimal stack is clean"                $'stacks:\n  - name: s\n    workspaces: [a, b]' none
 check "the old workspaces list is one clear error" $'workspaces:\n  - name: dev\n    dir: envs/dev\n    auto_apply: always' error "removed in v0.6.0"
-check "all settings with valid values are clean" $'defaults: { auto_apply: never, create_workspace: false, parallelism: 8, lock_timeout: 30s, plan_lock: true, require_reviewed_plan: true, var_file: x.tfvars, policy_dir: p }\nstacks:\n  - name: s\n    workspaces_glob: "ws/*"' none
+check "all settings with valid values are clean" $'defaults: { auto_apply: never, parallelism: 8, lock_timeout: 30s, plan_lock: true, require_reviewed_plan: true, var_file: x.tfvars, policy_dir: p }\nstacks:\n  - name: s\n    workspaces_glob: "ws/*"' none
 
 check "policy_packs as a list is clean"        $'defaults: { policy_packs: [safety, aws-s3] }\nstacks:\n  - name: s\n    workspaces: [a]' none
 check "policy_packs must be a list"             $'defaults: { policy_packs: safety }\nstacks:\n  - name: s\n    workspaces: [a]' error "list of strings"
@@ -71,7 +71,8 @@ check "lock_timeout as a bare number"           $'stacks:\n  - name: s\n    work
 check "parallelism zero"                        $'stacks:\n  - name: s\n    workspaces: [a]\n    parallelism: 0' error "whole number of 1 or more"
 check "parallelism fractional"                  $'stacks:\n  - name: s\n    workspaces: [a]\n    parallelism: 2.5' error "whole number of 1 or more"
 check "var_file is a list"                      $'stacks:\n  - name: s\n    workspaces: [a]\n    var_file: [x]' error "stacks[0].var_file: must be a string"
-check "bad value in defaults"                   $'defaults: { create_workspace: "yes" }\nstacks:\n  - name: s\n    workspaces: [a]' error "defaults.create_workspace"
+check "bad value in defaults"                   $'defaults: { plan_lock: "yes" }\nstacks:\n  - name: s\n    workspaces: [a]' error "defaults.plan_lock"
+check "create_workspace was removed (any value)" $'defaults: { create_workspace: true }\nstacks:\n  - name: s\n    workspaces: [a]' error "tfpls never creates a tofu workspace"
 
 check "unknown key is a warning"                $'stacks:\n  - name: s\n    workspaces: [a]\n    colour: blue' warning 'unknown key `colour` is ignored'
 check "typo autoapply => did you mean"          $'stacks:\n  - name: s\n    workspaces: [a]\n    autoapply: always' warning 'did you mean `auto_apply`?'

@@ -18,7 +18,7 @@ outputs:
     description: '{"include":[{"label":"dev-us-east-1"}, ...]} - one key, so jobs need no custom name'
     value: ${{ steps.detect.outputs.matrix }}
   entries:
-    description: 'object keyed by label: {name,label,stack,dir,workspace,auto_apply,drift_remediate,policy_params,notify_secret,notify_format,notify_mention,notify_template,owner_paths,after,policy_dir,policy_packs,var_file,parallelism,create_workspace,require_reviewed_plan,plan_lock,lock_timeout,drift_fix}'
+    description: 'object keyed by label: {name,label,stack,dir,workspace,auto_apply,drift_remediate,policy_params,notify_secret,notify_format,notify_mention,notify_template,owner_paths,after,policy_dir,policy_packs,var_file,parallelism,require_reviewed_plan,plan_lock,lock_timeout,drift_fix}'
     value: ${{ steps.detect.outputs.entries }}
   names:
     description: 'JSON array of the selected workspace names (small, for steps that only need the names)'

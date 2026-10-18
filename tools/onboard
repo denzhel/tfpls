@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
 # Onboard a repository: scan it, write the caller workflow (and a config only when your layout needs one), say what is left.
 # No network, no side effects other than those files.
-#   tools/onboard [--force] [--create-workspaces] [--ref v0] [--slug owner/tfpls] [--runs-on ubuntu-latest] [dir]
-# --create-workspaces: the tofu workspaces do not exist in your state yet: writes create_workspace: true (first run only).
+#   tools/onboard [--force] [--ref v0] [--slug owner/tfpls] [--runs-on ubuntu-latest] [dir]
 # # ubuntu-slim is cheaper but cuts every job after 15 minutes: only for workspaces that apply quickly.
 set -euo pipefail
 
 usage() { cat <<'USAGE'
 Onboard a repository: scan it, write the caller workflow (and a config only when your layout needs one), say what is left.
 No network, no side effects other than those files.
-  tools/onboard [--force] [--create-workspaces] [--ref v0] [--slug owner/tfpls] [--runs-on ubuntu-latest] [dir]
-  one-liner with flags: ... | bash -s -- --create-workspaces
---create-workspaces: the tofu workspaces do not exist in your state yet: writes create_workspace: true (first run only).
+  tools/onboard [--force] [--ref v0] [--slug owner/tfpls] [--runs-on ubuntu-latest] [dir]
+  one-liner with flags: ... | bash -s -- --runs-on ubuntu-slim
 --runs-on ubuntu-slim is cheaper but cuts every job after 15 minutes: only for workspaces that apply quickly.
 USAGE
 }
-force=false; newws=false; ref=v0; slug=denzhel/tfpls; runs_on=ubuntu-latest
+force=false; ref=v0; slug=denzhel/tfpls; runs_on=ubuntu-latest
 while [ $# -gt 0 ]; do
   case $1 in
     --force) force=true; shift ;;
-    --create-workspaces) newws=true; shift ;;
     --ref) ref=$2; shift 2 ;;
     --slug) slug=$2; shift 2 ;;
     --runs-on) runs_on=$2; shift 2 ;;
@@ -190,7 +187,7 @@ ok "$wf ${D}(runs on ${runs_on})${R}"
 cfg_active=false
 if [ -e .tfpls.yml ]; then
   info ".tfpls.yml already exists: left as it is"
-elif [ "$layout" = folders ] && ! $newws; then
+elif [ "$layout" = folders ]; then
   info "no config file needed for workspaces/<name>/ folders. Settings later, for example in .tfpls.yml:  overrides: { \"prod*\": { drift_fix: false } }"
 else
   {
@@ -225,11 +222,6 @@ else
         echo "#   - { name: dev, dir: envs/dev, workspaces: [default], watch: [modules] }"
         ;;
     esac
-    if $newws; then
-      echo "defaults:"
-      echo "  create_workspace: true       # first run only: remove after the first apply, a typo must not create new state"
-      cfg_active=true
-    fi
     echo "# Examples (settings match a workspace name or a stack name, * allowed):"
     echo "# overrides:"
     echo "#   \"prod*\": { drift_fix: false }   # production drift is fixed through a pull request only"
@@ -252,7 +244,7 @@ printf '     %s(or one secret with a JSON map of variables: gh secret set TFPLS_
 printf '  %s2.%s Encrypt saved plans: %sopenssl rand -base64 32 | gh secret set PLAN_ENCRYPTION_KEY%s\n' "$B" "$R" "$C" "$R"
 printf '  %s3.%s Commit the files and open ONE pull request: it plans everything and shows each plan as a comment. Merge it (nothing is applied); %s/tofu apply <workspace>%s works on the next pull request.\n' "$B" "$R" "$C" "$R"
 case $layout in folders|varfile)
-  $newws || printf '     %sWorkspaces that do not exist in your state yet fail the first plan: run again with --create-workspaces (first run only).%s\n' "$D" "$R";;
+  printf '     %sWorkspaces that do not exist in your state yet fail the first plan: create each once with `tofu workspace new <name>` (tfpls never creates workspaces).%s\n' "$D" "$R";;
 esac
 printf '  %s4.%s Approvals follow your repository: the pull request rule of a ruleset on the default branch (1 approval when there is none). You cannot approve your own pull request: add a second account, set the ruleset to 0 approvals, or, as an admin, add %s--now%s to /tofu apply.
 ' "$B" "$R" "$C" "$R"
