@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="docs/assets/tfpls-hero.svg" alt="tfpls: a smiling tofu holding a sign that says please, with the words plan, lock and ship. TF, please." width="720">
+  <img src="docs/assets/tfpls-hero.svg" alt="tfpls: an unimpressed tofu holding a sign that says please, with the words plan, lock and ship. TF, please." width="720">
 </p>
 
-**Plan on every pull request. Apply with one comment.** tfpls is OpenTofu on GitHub Actions for AWS and S3 state: a set of reusable workflows that run in your repository, on your Actions minutes. Nothing to host, no server of ours in the path.
+**Plan on every pull request. Apply with one comment.** Revolutionary, we know: you look at the plan *before* you apply it. tfpls is OpenTofu on GitHub Actions for AWS and S3 state: reusable workflows that run in your repository, on your Actions minutes. Nothing to host, no server of ours in the path.
 
-> 0.x: still young, built in spare time, and the interface can change between minor versions (see the [changelog](CHANGELOG.md)). Try it on a throwaway workspace first.
+> 0.x: young, built in spare time, and the interface can change between minor versions (see the [changelog](CHANGELOG.md)). Try it on a throwaway workspace first. Yes, before prod. Especially before prod.
 
 ## How it feels
 
-**1. You open a pull request.** Every workspace you touched gets a plan comment (older ones are marked as superseded):
+**1. You open a pull request.** Every workspace you touched gets a plan comment, so nobody can claim they did not know (older ones are marked as superseded):
 
 ````markdown
 **Plan:** 1 to add, 1 to change, 0 to destroy.
@@ -21,9 +21,9 @@
 `/tofu apply dev` to apply
 ````
 
-**2. A teammate reviews it.** Then you comment `/tofu apply dev`, and exactly that saved plan is applied.
+**2. A teammate actually reads it.** Then you comment `/tofu apply dev`, and exactly that saved plan is applied. Not a different one. Not "roughly that".
 
-**3. If something is missing, it says no, politely.** Never a silent skip:
+**3. If something is missing, it says no.** Politely, in writing, never a silent skip:
 
 > ⛔ **apply refused.** `dev`: apply needs 1 approving review(s) of the current commit (3f9a1c2); found 0  _(mode `strict`, 1 required)_. The number of approvals comes from the repository's ruleset for `main` (Settings, Rules; 1 when there is none). In an emergency a repository admin can comment `/tofu apply <workspace> --now`.
 
@@ -64,7 +64,7 @@ Every setting and input: [reference](docs/reference.md). Stuck locks, failed app
 
 ## Is it safe?
 
-Honestly: it depends on your cloud credentials, and tfpls says so.
+Short answer: as safe as your cloud credentials. tfpls will not pretend otherwise.
 
 - **The cloud credentials are the only hard boundary.** Plans run the code of the pull request, so anyone who can push a branch runs code with the plan role. Approvals and reviewed plans are process controls on top. For a real boundary, give apply its own role ([credentials](docs/credentials.md)).
 - **Approvals and saved plans.** An apply needs the approvals your repository asks for, from people with write access. The saved plan is bound to the commit and is single-use; on public repositories it is stored encrypted.
@@ -82,7 +82,7 @@ The full picture: [security model](docs/security-model.md). Found a vulnerabilit
 
 ## Contribute
 
-Pull requests are welcome ([contributing](CONTRIBUTING.md), sign-off under the DCO; [releasing](docs/releasing.md)).
+Pull requests are welcome (yes, even the ones that fix our typos) ([contributing](CONTRIBUTING.md), sign-off under the DCO; [releasing](docs/releasing.md)).
 
 ```sh
 bash tests/run-all.sh      # offline tests
@@ -92,4 +92,4 @@ shellcheck -S warning actions/*/*.sh tools/* tests/*.sh
 
 Source-available under [FSL-1.1-ALv2](LICENSE): use, modify and contribute freely, no competing product or service, and each release becomes Apache-2.0 after two years.
 
-<p align="center"><sub>Made with care, and a little tofu. 🙏</sub></p>
+<p align="center"><sub>Made with care, a little tofu, and zero tolerance for "it worked on my machine". 🙏</sub></p>
