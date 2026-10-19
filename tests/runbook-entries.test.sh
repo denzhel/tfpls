@@ -23,4 +23,7 @@ check "the runbook explains the apply-before-merge window" docs/runbooks.md "## 
 check "reviewed-plans links to the apply-before-merge window" docs/reviewed-plans.md "runbooks.md#apply-before-merge-the-window"
 check "the runbook gives the safe order" docs/runbooks.md "Apply, then merge right away"
 
+check "runner-minutes explains the ubuntu-latest move to 26.04" docs/runner-minutes.md "## The \`ubuntu-latest\` label moves to Ubuntu 26.04"
+check "runner-minutes says how to pin the old image" docs/runner-minutes.md "runs_on: ubuntu-24.04"
+
 done_tests
