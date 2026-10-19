@@ -40,6 +40,7 @@ gh api -X POST repos/OWNER/REPO/actions/runners/generate-jitconfig \
 Run the runner itself in a container when you want isolation from the host:
 
 - Use a **glibc-based image** (Debian or Ubuntu) for the runner. GitHub publishes its runner for Linux (x64, arm, arm64), macOS and Windows built for glibc; it does not publish a musl (Alpine) build, so Alpine is not a supported *runner host* image.
+- The actions tfpls uses (`actions/checkout`, `actions/upload-artifact`, the Pages actions) run on Node.js 24, which needs a runner of at least **v2.327.1**. GitHub-hosted runners are current; update self-hosted runners before upgrading tfpls.
 - An Alpine image can be used as the **job container** for a workflow (`container:`) when it has Node.js available for JavaScript actions, but this was not tried with tfpls.
 - Mount nothing from the host that the jobs should not see. Pass credentials as secrets, not as mounted files.
 - *Not exercised here:* a containerized runner. Local development of this repository used `act` with an Alpine-based image to run the workflows quickly; that is a test harness, not a supported runner setup.
