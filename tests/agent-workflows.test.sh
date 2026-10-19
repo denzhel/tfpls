@@ -18,9 +18,17 @@ for f in "$E" "$I"; do
   y "$f" '.jobs.gate.if' | grep -q "sender.type != 'Bot'" && ok "$n: bots never start it (no loop)" || bad "$n: bot filter missing"
   y "$f" '.jobs.gate.if' | grep -q "pull_request == null" && ok "$n: pull requests are ignored" || bad "$n: PR filter missing"
   eq "$n: the model job waits for the gate" "$(y "$f" '.jobs.agent.needs')" "gate"
-  eq "$n: the model job only runs when the gate says so" "$(y "$f" '.jobs.agent.if')" "needs.gate.outputs.run == 'true'"
+  y "$f" '.jobs.agent.if' | grep -q "^needs.gate.outputs.run == 'true'" && ok "$n: the model job only runs when the gate says so" || bad "$n: agent condition"
   eq "$n: the gate is the script that is tested offline" "$(y "$f" '.jobs.gate.steps[] | select(.id == "g") | .run' | grep -c 'tools/agent-gate.sh')" "1"
   [ "$(y "$f" '.jobs.gate.timeout-minutes')" -le 5 ] && ok "$n: the gate job is short" || bad "$n: gate timeout"
+  # the gate job is reached by more people than the agent job: it gets only what it needs (no OIDC token, no write to the code)
+  eq "$n: the gate job's own permissions: read the code, write issues, read runs (the daily cap)" \
+    "$(y "$f" '.jobs.gate.permissions | to_entries | map(.key + ":" + .value) | sort | join(",")')" "actions:read,contents:read,issues:write"
+  eq "$n: the gate's checkout keeps no token" "$(y "$f" '.jobs.gate.steps[0].with."persist-credentials"')" "false"
+  # never silent: the gate's status comment is posted, and a filled-in issue gets the gate's label
+  y "$f" '.jobs.gate.steps[] | select(.if == "steps.g.outputs.comment_file != '"''"'") | .run' | grep -q 'gh issue comment' && ok "$n: a step posts the gate's status comment" || bad "$n: no status comment step"
+  y "$f" '.jobs.gate.steps[] | select(.if == "steps.g.outputs.label != '"''"'") | .run' | grep -q 'issues/$ISSUE/labels' && ok "$n: a step adds the label the gate decided" || bad "$n: no label step"
+  y "$f" '.jobs.agent.steps[] | select(.name == "Stop with a message when the Claude token is missing") | .run' | grep -q '\*\*Next:\*\*' && ok "$n: even the missing-token comment says what happens next" || bad "$n: token comment without Next"
   eq "$n: one run at a time per issue, never cancelling a running one" "$(y "$f" '.concurrency.group | test("^claude-issue-")')|$(y "$f" '.concurrency."cancel-in-progress"')" "true|false"
   grep -q 'pull_request_target' "$f" && bad "$n: uses pull_request_target" || ok "$n: no pull_request_target"
   a=$(args "$f")
@@ -44,10 +52,18 @@ for f in "$E" "$I"; do
 done
 
 # ---- who can start what
-y "$E" '.jobs.gate.if' | grep -q "author_association == 'OWNER'" && ok "elaborate: an opened issue only from the owner" || bad "elaborate: owner filter"
-y "$E" '.jobs.gate.if' | grep -q "needs-info" && ok "elaborate: answers only on needs-info issues" || bad "elaborate: needs-info filter"
-y "$I" '.jobs.gate.if' | grep -q "comment.author_association == 'OWNER'" && ok "implement: only the owner" || bad "implement: owner filter"
-y "$I" '.jobs.gate.if' | grep -q "'/implement'" && ok "implement: the exact command" || bad "implement: command filter"
+# every new issue reaches the (free) gate, which elaborates the maintainers' and leaves a note on the others' (never silent)
+y "$E" '.jobs.gate.if' | grep -qE "^ *github.event_name == 'issues' \|\|$" && ok "elaborate: every opened issue reaches the gate (it tells the maintainers' from the rest)" || bad "elaborate: issues filter"
+y "$E" '.jobs.gate.if' | grep -qF "startsWith(github.event.comment.body, '/elaborate')" && ok "elaborate: /elaborate reaches the gate (it checks who)" || bad "elaborate: /elaborate filter"
+y "$E" '.jobs.gate.if' | grep -q "needs-info" && y "$E" '.jobs.gate.if' | grep -qF "contains(fromJSON('[\"OWNER\",\"MEMBER\",\"COLLABORATOR\"]'), github.event.comment.author_association)" \
+  && ok "elaborate: answers run it only on needs-info issues and only from the owner or a collaborator" || bad "elaborate: needs-info filter"
+# /implement stays owner only (the owner's decision): anyone's /implement reaches the gate, which refuses with the reason, and the agent
+# job checks the owner again, so that a mistake in the gate can never let anyone else start an implementation
+y "$I" '.jobs.gate.if' | grep -qF "startsWith(github.event.comment.body, '/implement')" && ! y "$I" '.jobs.gate.if' | grep -q "author_association" \
+  && ok "implement: /implement of anyone reaches the gate, which says why it refuses" || bad "implement: command filter"
+{ y "$I" '.jobs.agent.if' | grep -qF "github.event.comment.author_association == 'OWNER'" && y "$I" '.jobs.agent.if' | grep -qF "github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner"; } \
+  && ok "implement: the agent job itself runs only for the owner" || bad "implement: agent job not owner-only"
+grep -qF '[ "${ACTOR_ASSOC:-NONE}" = OWNER ] || skip "/implement is for the owner"' "$here/tools/agent-gate.sh" && ok "implement: the gate refuses anyone but the owner" || bad "implement: gate owner check"
 eq "implement: comments and a manual run start it" "$(y "$I" '.on | keys | sort | join(",")')" "issue_comment,workflow_dispatch"
 eq "elaborate: opened issues, comments and a manual run start it" "$(y "$E" '.on | keys | sort | join(",")')" "issue_comment,issues,workflow_dispatch"
 # ---- manual runs from a branch (workflow_dispatch): the owner only, with an issue number, through the same gate
@@ -71,6 +87,15 @@ sec=$(sed -n '/^## Elaborating new issues/,/^## Implementing an issue/p' "$here/
 grep -q 'cannot write files' <<<"$(prompt "$E")" && grep -q 'single' <<<"$(prompt "$E")" && grep -q 'bold' <<<"$(prompt "$E")" && ok "elaborate: the prompt says: no files, single quotes, bold titles" || bad "elaborate: prompt lacks the body rule"
 ae=$(args "$E"); ai=$(args "$I")
 grep -qE 'Edit|Write|Bash\(git|Bash\(bash|gh pr create' <<<"$ae" && bad "elaborate: the agent can change files or run code" || ok "elaborate: read-only tools, plus issue edit and comment"
+# a proposal (an issue from outside the project) can only comment: its tool list has no issue edit and no labels
+tp=$(sed -nE "s/.*mode == 'proposal' && '([^']*)' \|\| '([^']*)'.*/\1/p" <<<"$ae"); te=$(sed -nE "s/.*mode == 'proposal' && '([^']*)' \|\| '([^']*)'.*/\2/p" <<<"$ae")
+eq "elaborate: in proposal mode the only tool that writes is a comment" "$tp" "Read,Grep,Glob,Bash(gh issue comment:*)"
+eq "elaborate: otherwise the tools are as before (read, issue edit and comment, label list)" "$te" "Read,Grep,Glob,Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*)"
+eq "elaborate: the gate's mode reaches the agent job" "$(y "$E" '.jobs.gate.outputs.mode')" '${{ steps.g.outputs.mode }}'
+{ grep -qF 'needs.gate.outputs.mode' <<<"$(prompt "$E")" && grep -qF '**Next:**' <<<"$(prompt "$E")" && grep -q 'at most three questions' <<<"$(prompt "$E")"; } \
+  && ok "elaborate: the prompt gives the mode, asks for at most three questions and the Next line" || bad "elaborate: prompt lacks mode, questions or Next"
+eq "elaborate: the report knows the mode (a proposal's last line differs)" "$(y "$E" '.jobs.agent.steps[] | select(.name == "Report what the run used") | .env.MODE')" '${{ needs.gate.outputs.mode }}'
+grep -qF '**Next:**' <<<"$(prompt "$I")" && ok "implement: the prompt asks for the Next line on the issue" || bad "implement: prompt lacks Next"
 eq "elaborate: the agent job does not persist the checkout credentials" "$(y "$E" '.jobs.agent.steps[0].with."persist-credentials"')" "false"
 grep -qF 'Bash(git push -u origin agent/*)' <<<"$ai" && ok "implement: it can push only agent/ branches" || bad "implement: push rule"
 # a rule `Bash(prefix/:*)` needs a word boundary after the prefix and never matches `prefix/file` (it denied the first real run): path-like prefixes use `*`
@@ -94,6 +119,22 @@ eq "the Claude action is the same pinned commit in triage, elaboration and imple
 grep -q 'empty template checkbox' "$here/AGENTS.md" && grep -q 'never counts as open boxes' "$here/AGENTS.md" && ok "AGENTS.md: empty placeholder boxes of the preserved original become plain lines" || bad "AGENTS.md: placeholder rule missing"
 grep -q 'workflow file of the run differs' "$here/CONTRIBUTING.md" && ok "CONTRIBUTING: says what a manual run from a branch can and cannot test" || bad "CONTRIBUTING lacks the limit of manual runs"
 grep -q '^## Elaborating new issues' "$here/AGENTS.md" && grep -q '^## Implementing an issue' "$here/AGENTS.md" && ok "AGENTS.md has both sets of rules" || bad "AGENTS.md sections"
+# defaults first, at most three questions (one number everywhere), the Next line, proposal mode
+{ grep -q 'Defaults first' <<<"$sec" && grep -q 'at most three' <<<"$sec" && grep -q 'Assumptions (reply to change any)' <<<"$sec" && ! grep -qi 'at most five' "$here/AGENTS.md"; } \
+  && ok "AGENTS.md: defaults first, assumptions, at most three questions (no 'five' left)" || bad "AGENTS.md: defaults-first rule"
+[ "$(grep -c '^   - .*\*\*Next:\*\*' <<<"$sec")" -eq 3 ] && ok "AGENTS.md: the three Next lines (ready, needs-info, proposal)" || bad "AGENTS.md: Next lines"
+grep -q 'Proposal mode' <<<"$sec" && grep -q 'Never edit the body or the labels' <<<"$sec" && ok "AGENTS.md: proposal mode comments only" || bad "AGENTS.md: proposal mode"
+tri=$(sed -n '/^## Triage of new issues/,/^## Elaborating new issues/p' "$here/AGENTS.md")
+{ grep -q '\*\*Next:\*\*' <<<"$tri" && ! grep -q 'skeleton comment\|add one comment with a proposed' <<<"$tri"; } && ok "AGENTS.md: the triage comment ends with Next and proposes no body (one comment per run)" || bad "AGENTS.md: triage rules"
+# the flow in four steps and who can do what, in AGENTS.md and in CONTRIBUTING.md
+flow=$(sed -n '/^## The issue flow/,/^## Triage of new issues/p' "$here/AGENTS.md")
+{ [ "$(grep -cE '^[1-4]\. \*\*' <<<"$flow")" -eq 4 ] && grep -qF '| Who | Opens an issue | Comments on a `needs-info` issue | `/elaborate` | `/implement` |' <<<"$flow"; } \
+  && ok "AGENTS.md: the issue flow in four steps and the who-can-do-what table" || bad "AGENTS.md: issue flow"
+ia=$(sed -n '/^## Issue agent (maintainers)/,$p' "$here/CONTRIBUTING.md")
+{ grep -q 'The flow in four steps' <<<"$ia" && [ "$(grep -cE '^[1-4]\. \*\*' <<<"$ia")" -eq 4 ] && grep -q 'Who can do what' <<<"$ia" \
+  && grep -q 'Any comment of the owner or a collaborator on an issue labelled `needs-info` runs the agent again' <<<"$ia" \
+  && grep -q '| `/implement \[instructions\]` | the implementation starts on a `ready` issue | refused with the reason | refused with the reason |' <<<"$ia"; } \
+  && ok "CONTRIBUTING: four steps, who can do what, how an answer runs the agent again, /implement owner only" || bad "CONTRIBUTING: issue agent flow"
 grep -qiE 'never.*merge' "$here/AGENTS.md" && grep -q 'Refs #<n>' "$here/AGENTS.md" && grep -qi 'cost' "$here/AGENTS.md" && ok "AGENTS.md says: never merge, Refs not Closes, and the cost rules" || bad "AGENTS.md rules"
 t="$here/.github/pull_request_template.md"
 { grep -q '^## TLDR' "$t" && grep -q '\*\*What:\*\*' "$t" && grep -q '\*\*Why:\*\*' "$t" && grep -q '\*\*How:\*\*' "$t"; } && ok "the pull request template starts with a TLDR (what, why, how)" || bad "TLDR missing"
