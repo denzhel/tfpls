@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # What an issue-agent run used: one line in the run summary and one comment on the issue. The comment carries the marker
 # that the gate counts for the per-issue cap (tools/agent-gate.sh), and it is posted for a failed run too (it cost something).
+# Its last line says what happens next, from the outcome and the labels the agent left (every agent comment ends with one).
 #   tools/agent-report.sh
-# Inputs (environment): PHASE (elaborate | implement), ISSUE, REPO, RUN_URL, OUTCOME (the agent step's outcome), EXEC (the
-# execution file of anthropics/claude-code-action: JSON or JSON lines, with a final "result" message), GH_TOKEN.
+# Inputs (environment): PHASE (elaborate | implement), MODE (elaborate | proposal, from the gate; optional), ISSUE, REPO, RUN_URL,
+# OUTCOME (the agent step's outcome), EXEC (the execution file of anthropics/claude-code-action: JSON or JSON lines, with a final
+# "result" message), GH_TOKEN.
 # Best effort: it never fails the job.
 set -uo pipefail
 PHASE=${PHASE:?}; ISSUE=${ISSUE:?}; REPO=${REPO:?}
@@ -48,8 +50,28 @@ ${last}
 
 </details>"
 
+# what happens next: from the outcome and the labels after the run
+labels=$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || true)
+has_label() { case ",$labels," in *",$1,"*) return 0;; esac; return 1; }
+if [ "$PHASE" = implement ]; then
+  if [ -n "${pr:-}" ]; then next="**Next:** the owner reviews the pull request; the issue is closed when its evidence is in."
+  else next="**Next:** read the agent's last words and the run log; the owner can comment \`/implement\` with instructions to try again."; fi
+elif [ "$res" = null ] || [ "$outcome" != success ]; then
+  next="**Next:** the run did not finish (see the run log): comment \`/elaborate\` to try again, or fill in the issue by hand."
+elif [ "${MODE:-}" = proposal ]; then
+  next="**Next:** a maintainer takes what fits from the proposal above (the issue body is unchanged); \`/elaborate\` with corrections updates the proposal."
+elif has_label needs-info; then
+  next="**Next:** answer the questions above in a comment (a plain \"yes\" accepts the defaults); any comment of the owner or a collaborator runs the agent again."
+elif has_label ready; then
+  next="**Next:** the owner comments \`/implement\` (optionally with instructions) to start the implementation; to change an assumption first, comment \`/elaborate\` with the change."
+else
+  next="**Next:** the agent left no label: comment \`/elaborate\` to run it again, or label the issue \`ready\` by hand when the body is complete."
+fi
+
 body="$line${extra:+
-$extra}"
+$extra}
+
+$next"
 echo "$body"
 [ -n "${GITHUB_STEP_SUMMARY:-}" ] && echo "$body" >> "$GITHUB_STEP_SUMMARY"
 gh issue comment "$ISSUE" --repo "$REPO" --body "$body
