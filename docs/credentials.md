@@ -30,7 +30,7 @@ If the runner already has AWS credentials, you can skip OIDC: set neither `TFPLS
 
 ## What the role needs
 
-Whatever your configuration needs to plan and apply: access to the S3 state and its lock object, and the permissions of the resources you manage. tfpls does not narrow it.
+Whatever your configuration needs to plan and apply: access to the S3 state and its lock object, and the permissions of the resources you manage. tfpls does not narrow it. For a read-only plan role see [Resource read is more than `Describe*`](#resource-read-is-more-than-describe) below.
 
 ## The trust policy
 
@@ -89,6 +89,14 @@ With one role, the approval rules are advisory: the plan of a pull request runs 
 Plan jobs have no environment, so they get the read-only role; applies, unlocks, remediation and the `locks` task declare the environment and get the apply role. A read-only plan role also cannot take the state lock in S3 if you use `use_lockfile`: give it `s3:PutObject` on the `*.tflock` objects only.
 
 This is written from GitHub's rules and the way the workflows read the variable; it has **not** been run here (environments of private repositories need GitHub Pro or Team, and reviewer gates need Enterprise). Try it on a scratch workspace first.
+
+### Resource read is more than `Describe*`
+
+A plan refreshes every resource in the state. For some resources the refresh calls a `Get*` or `List*` action that a `Describe*` wildcard does not cover, so a role with only `ec2:Describe*` plans fine until such a resource is in the state, and from then on **every plan of that workspace fails**. Example: a managed prefix list (`aws_ec2_managed_prefix_list`) needs `ec2:GetManagedPrefixListEntries`.
+
+What you see: the plan comment says `plan failed`, and the run log has a line like `Error: reading EC2 Managed Prefix List (pl-...) Entries: ... StatusCode: 403`. The fix is to add the action named in the error to the read-only role (read actions only). The apply role is not affected, because it has the write actions and usually the read ones too. See [the runbook](runbooks.md#every-plan-of-a-workspace-fails-with-a-403-on-refresh).
+
+This is written from the failure seen in the sandbox of this repository (a read-only role with `ec2:Describe*` and state access, one prefix list in the state).
 
 ## Rotating keys
 

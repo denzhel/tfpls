@@ -27,6 +27,14 @@ What a first pull request shows and what to do. Everything is explained on the p
 1. `/tofu plan <workspace>` and review the new plan; apply that.
 2. With `auto_apply` on merge this is automatic: the run plans again and applies under the same rule.
 
+## Every plan of a workspace fails with a 403 on refresh
+The plan comment says `plan failed`; the run log has `Error: reading <resource> ...: StatusCode: 403` (for example `reading EC2 Managed Prefix List (pl-...) Entries`).
+
+**Why**: the read-only plan role can list the resource (`Describe*`) but not read it in full (`Get*`/`List*`), and a plan refreshes everything in the state, so every plan of that workspace fails until the role can read it.
+1. Take the action name from the error (`GetManagedPrefixListEntries` in the example) and add it to the read-only role's policy; read actions only.
+2. Push a commit or comment `/tofu plan <workspace>`.
+3. Details and the role layout: [credentials](credentials.md#resource-read-is-more-than-describe).
+
 ## An apply failed half-way
 The comment lists what was already changed (read from the apply output), quotes the errors and lists the options: fix forward with a new plan, or revert the change in a new pull request (the revert's plan shows exactly what it would undo). Nothing is rolled back automatically, and nothing changes infrastructure you did not review. Do not force-unlock or edit state by hand.
 1. Read the quoted error. Fix forward (permissions, quota, a name clash) and `/tofu plan <workspace>`: the new plan contains only what is left.
