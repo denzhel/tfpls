@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- **Docs:** a shorter README (50 lines instead of 93): why you will like it, see it in sixty seconds, a four-step quick start around the onboarding one-liner, is it safe in three bullets, and where to go next. The feature table and the "Good to know" notes moved to the docs index (`docs/README.md`), which now also links the reference; the hero and the first paragraph are unchanged. Maintainers: `tests/readme.test.sh` keeps them byte for byte and the README under 60 lines.
 - **Changed:** the pinned actions are at their latest releases: `actions/checkout` v7.0.1, `actions/upload-artifact` v7.0.2, `anthropics/claude-code-action` v1.0.253 (all by SHA). Self-hosted runners still need v2.327.1 or newer.
 - **Changed:** the default tool versions are the latest: OpenTofu 1.13.1 (was 1.10.6) and conftest 0.71.1 (was 0.56.0). A repository that pins its OpenTofu version (`.opentofu-version`, `.tofu-version`, `.terraform-version` or an exact `required_version`) is not affected; one that does not gets 1.13.1, and a reviewed plan saved with another version is refused and must be planned again (the existing "tofu version change" message).
 - Maintainers: `tests/plan-store.test.sh` no longer fails by chance (about one run in 256): the tamper check now always changes the byte instead of writing a fixed value.
