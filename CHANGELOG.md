@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: `tests/plan-store.test.sh` no longer fails by chance (about one run in 256): the tamper check now always changes the byte instead of writing a fixed value.
 - **Changed:** the actions tfpls uses run on Node.js 24, so GitHub's "Node.js 20 is deprecated" warning is gone: `actions/checkout` v5.1.0, `actions/upload-artifact` v6.0.0, `actions/upload-pages-artifact` v5.0.0, `actions/deploy-pages` v5.0.1 (all pinned by SHA). **Self-hosted runners must be v2.327.1 or newer.**
 - **Docs:** what a plan contains: the state against the merged result, so `/tofu apply` also applies changes that are on the default branch but were never applied (`never`, or what `additive_only` leaves to a person). New section in `docs/reviewed-plans.md`, a runbook entry and a link from the `auto_apply` reference.
 - **Docs:** the read-only plan role needs more than `Describe*` for some resources (example: `ec2:GetManagedPrefixListEntries` for managed prefix lists); without it every plan of a workspace holding one fails with a 403 on refresh. New section in `docs/credentials.md` and a runbook entry.
