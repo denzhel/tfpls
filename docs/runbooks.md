@@ -27,6 +27,18 @@ What a first pull request shows and what to do. Everything is explained on the p
 1. `/tofu plan <workspace>` and review the new plan; apply that.
 2. With `auto_apply` on merge this is automatic: the run plans again and applies under the same rule.
 
+## Apply before merge: the window
+`/tofu apply` applies a pull request's plan before the pull request is merged, so until the merge the **state is ahead of the default branch**. In that window:
+- plans of other pull requests of the same workspace show your applied change as something to undo (a destroy, or an update back) next to their own change, so their counts are larger than their diff;
+- a merge to the default branch plans against the same state. With `auto_apply: always` it **applies that undo**: another pull request's merge can destroy what yours applied.
+
+Observed in a test repository: one pull request applied a resource by comment and was not yet merged; a second pull request on the same `always` workspace planned `1 to add, 0 to change, 1 to destroy` (the destroy was the first one's resource) and its merge applied exactly that.
+
+Safe order:
+1. Apply, then merge right away; do not merge other pull requests of that workspace in between.
+2. Read the destroy count of a plan before you approve or merge: a destroy you did not write is this situation (see also [what a plan contains](reviewed-plans.md#what-a-plan-contains)).
+3. For workspaces that matter, prefer `additive_only` (updates and deletes need a person) or `never`: neither applies a destroy by itself after a merge.
+
 ## The plan shows resources my pull request did not change
 The `Plan:` line counts more than the pull request touches, or the plan lists resources that are not in the diff.
 

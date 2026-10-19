@@ -32,7 +32,7 @@ A plan is the difference between the **state** of the workspace and the **merged
 
 Example from a test repository: a pull request added one prefix list to a `never` workspace. Its plan said `2 to add`, because a launch template merged earlier had never been applied, and `/tofu apply` created both.
 
-How to recognise it: the counts in the `Plan:` line are larger than what the pull request changes, or the plan lists resources the diff does not mention. What to do: read the whole plan, it is what will be applied. If the extra changes are not wanted, revert them on the default branch first. If they are, apply knowingly, or apply them first through a pull request of their own that touches the workspace. See [the runbook](runbooks.md#the-plan-shows-resources-my-pull-request-did-not-change).
+How to recognise it: the counts in the `Plan:` line are larger than what the pull request changes, or the plan lists resources the diff does not mention. What to do: read the whole plan, it is what will be applied. If the extra changes are not wanted, revert them on the default branch first. If they are, apply knowingly, or apply them first through a pull request of their own that touches the workspace. See [the runbook](runbooks.md#the-plan-shows-resources-my-pull-request-did-not-change). The same difference exists in the other direction while a pull request is applied but not yet merged: [apply before merge](runbooks.md#apply-before-merge-the-window).
 
 ## Why encrypt
 
