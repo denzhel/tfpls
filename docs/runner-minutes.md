@@ -58,3 +58,11 @@ Example, 20 workspaces: the daily schedule is 22 minutes (detect, 20 drift jobs,
 - Keep `workspace_paths` accurate so a change selects one workspace, not all of them.
 - Use `max_parallel` to bound concurrency, and `timeout_minutes` so a hung job cannot burn an hour.
 - `queue: true` jobs wait while holding a runner: prefer the default concurrency group on hosted runners.
+
+## The `ubuntu-latest` label moves to Ubuntu 26.04
+
+GitHub moves `ubuntu-latest` from Ubuntu 24.04 to Ubuntu 26.04 between 2026-10-19 and 2026-11-19 ([announcement](https://github.com/actions/runner-images/issues/14748)). Callers with `runs_on: ubuntu-latest` (the default) switch on their own during that time. What differs on the image, from the published software lists: jq 1.7 to 1.8.1, Bash 5.2 to 5.3, OpenSSL 3.0 to 3.5, Python 3.12 to 3.14, curl 8.5 to 8.18, Node.js 22 to 24; yq, git and the GitHub CLI are the same.
+
+What was checked on the explicit label `ubuntu-26.04`: the CI of tfpls (the whole offline suite passes; the `lint` job passes once actionlint accepts the label, because actionlint 1.7.12 does not know it yet and says `label "ubuntu-26.04" is unknown`), and a full cycle in a test repository with `runs_on: ubuntu-26.04`: a pull request plan, `/tofu apply`, the merge apply and the dashboard all ran green.
+
+To stay on the old image until you have tried the new one, set `runs_on: ubuntu-24.04`; to move early, set `runs_on: ubuntu-26.04` (and expect an older actionlint to complain about the label). Self-hosted runners are not affected.
