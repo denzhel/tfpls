@@ -15,6 +15,7 @@ Start with [getting started](getting-started.md), keep the [runbooks](runbooks.m
 | pick a state backend | [backends.md](backends.md) |
 | run my own runners | [runners.md](runners.md) |
 | release a new version | [releasing.md](releasing.md) |
+| keep the actions, providers and tool versions up to date (Dependabot) | [dependencies.md](dependencies.md) |
 
 ## What you get
 
