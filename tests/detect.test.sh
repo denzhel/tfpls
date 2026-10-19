@@ -40,7 +40,7 @@ gt add -A >/dev/null; gt commit -qm base; BASE0=$(gt rev-parse HEAD)
 # shellcheck disable=SC2034
 run() {
   : > "$T/out"
-  OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" NAME="${2:-}" JQ="$JQF" VALIDATE="$here/../actions/detect-workspaces/validate.jq" bash "$T/run.sh" 2>&1); rc=$?
+  OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" HEAD_REF="${4:-}" NAME="${2:-}" JQ="$JQF" VALIDATE="$here/../actions/detect-workspaces/validate.jq" bash "$T/run.sh" 2>&1); rc=$?
 }
 wss() { sed -n 's/^entries=//p' "$T/out" | jq -r '[.[].workspace] | sort | join(",")'; }
 field() { sed -n 's/^entries=//p' "$T/out" | jq -r --arg w "$1" --arg f "$2" '.[] | select(.workspace==$w) | .[$f]'; }
@@ -128,7 +128,7 @@ Y
 run lock-bad2.yml "" "";  [ $rc -ne 0 ] && ok "invalid plan_lock is rejected" || bad "invalid plan_lock"
 
 # matrix size guard (GitHub allows at most 256 jobs per matrix)
-run() { : > "$T/out"; OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" NAME="${2:-}" JQ="$JQF" VALIDATE="$here/../actions/detect-workspaces/validate.jq" TFPLS_MAX_MATRIX="${TFPLS_MAX_MATRIX:-256}" bash "$T/run.sh" 2>&1); rc=$?; }
+run() { : > "$T/out"; OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" HEAD_REF="${4:-}" NAME="${2:-}" JQ="$JQF" VALIDATE="$here/../actions/detect-workspaces/validate.jq" TFPLS_MAX_MATRIX="${TFPLS_MAX_MATRIX:-256}" bash "$T/run.sh" 2>&1); rc=$?; }
 TFPLS_MAX_MATRIX=3 run .tfpls.yml "" ""
 [ $rc -ne 0 ] && ok "more workspaces than the matrix limit => error" || bad "limit not enforced"
 case "$OUT" in *"selects 4 workspaces"*"at most 3 jobs"*"Split the change"*) ok "the error says how many were selected, the limit and what to do";; *) bad "message: $OUT";; esac
@@ -290,5 +290,17 @@ eq "a stack is selected by its label, and the label does not change with the sel
 printf 'stacks: [{ name: s, dir: ., workspaces: [] }]\n' > "$R/empty.yml"; run empty.yml "" ""
 case "$OUT" in *"no workspaces found"*) ok "no workspaces at all is a warning that says how to describe the layout";; *) bad "no-workspaces warning missing: $OUT";; esac
 eq "and configured is 0" "$(sed -n 's/^configured=//p' "$T/out")" "0"
+
+# a base older than the base of the merge ref (the base branch moved after the pull request was opened): with the pull request's
+# own head only its own changes select workspaces; without it the diff keeps its old meaning. A fresh repository, default layout.
+R="$T/race"; mkdir -p "$R"; gt init -q -b main
+for w in dev stg qa; do mkdir -p "$R/workspaces/$w"; echo "# $w" > "$R/workspaces/$w/main.tf"; done
+gt add -A >/dev/null; gt commit -qm base; M0=$(gt rev-parse HEAD)
+gt switch -q -c pr; commit_change workspaces/dev/main.tf; commit_change workspaces/stg/main.tf; PRHEAD=$(gt rev-parse HEAD)
+gt switch -q main; commit_change workspaces/qa/main.tf     # the base branch moves on: not part of the pull request
+gt merge -q --no-ff -m "merge ref" pr >/dev/null             # what the merge ref of the pull request looks like
+run none.yml "" "$M0";            eq "stale base, no head_ref: what the base branch gained is counted too (unchanged default)" "$(wss)" "dev,qa,stg"
+run none.yml "" "$M0" "$PRHEAD";  eq "stale base with head_ref: only the pull request's own changes select, both of its workspaces" "$(wss)" "dev,stg"
+eq "plan.yml gives the detect step the pull request's own head" "$(yq -r '.jobs.detect.steps[] | select(.id == "d") | .with.head_ref' "$here/../.github/workflows/plan.yml")" '${{ github.event.pull_request.head.sha }}'
 
 done_tests

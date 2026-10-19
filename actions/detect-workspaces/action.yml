@@ -10,6 +10,9 @@ inputs:
   base_ref:
     description: Git ref/sha to diff against (mode=changed)
     default: ""
+  head_ref:
+    description: "Git ref/sha whose changes since the merge base with base_ref select workspaces (mode=changed). Default HEAD. A pull request run passes the pull request's own head, so a base branch that moved on after the pull request was opened does not select workspaces the pull request did not touch."
+    default: ""
   name:
     description: "Space-separated selectors (name, workspace, glob, or 'all'); overrides mode"
     default: ""
@@ -38,6 +41,7 @@ runs:
         CONFIG: ${{ inputs.config }}
         MODE: ${{ inputs.mode }}
         BASE: ${{ inputs.base_ref }}
+        HEAD_REF: ${{ inputs.head_ref }}
         NAME: ${{ inputs.name }}
         JQ: ${{ github.action_path }}/detect.jq
         VALIDATE: ${{ github.action_path }}/validate.jq
@@ -96,7 +100,7 @@ runs:
              || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
           : # no usable base (new branch, force-push): consider everything
         else
-          changed=$(git diff --name-only --no-renames "$BASE"...HEAD | jq -R . | jq -sc .)
+          changed=$(git diff --name-only --no-renames "$BASE"..."${HEAD_REF:-HEAD}" | jq -R . | jq -sc .)
         fi
 
         # warnings that help a newcomer: no workspace at all, or an override that matches nothing
