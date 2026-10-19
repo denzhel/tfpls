@@ -19,4 +19,8 @@ check "the runbook links to the reviewed-plans section" docs/runbooks.md "review
 check "reviewed-plans links to the runbook entry" docs/reviewed-plans.md "runbooks.md#the-plan-shows-resources-my-pull-request-did-not-change"
 check "the auto_apply reference links to it" docs/reference.md "reviewed-plans.md#what-a-plan-contains"
 
+check "the runbook explains the apply-before-merge window" docs/runbooks.md "## Apply before merge: the window"
+check "reviewed-plans links to the apply-before-merge window" docs/reviewed-plans.md "runbooks.md#apply-before-merge-the-window"
+check "the runbook gives the safe order" docs/runbooks.md "Apply, then merge right away"
+
 done_tests
