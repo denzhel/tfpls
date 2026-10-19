@@ -1,0 +1,30 @@
+# Weekly watch of the default tool versions: OpenTofu and conftest (actions/setup/install.sh) and actionlint (ci.yml)
+# against their latest releases. Keeps one open issue "Tool versions behind" up to date and edits no file: bumping a
+# default stays a reviewed pull request. See docs/dependencies.md#tool-versions.
+#   gh workflow run tool-versions.yml   (run it by hand)
+name: tool-versions
+on:
+  schedule:
+    - cron: "23 5 * * 1"   # Mondays 05:23 UTC, after Dependabot's weekly run at 05:00
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: tool-versions
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: compare the defaults with the latest releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash tools/tool-versions.sh
