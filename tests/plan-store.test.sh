@@ -34,8 +34,17 @@ expect_ok "unpack roundtrip" tfpls_unpack "$f" "$T/u1"
 cmp -s "$T/w/tfplan" "$T/u1/tfplan" && ok "plan bytes identical" || bad "plan bytes differ"
 # wrong key
 ( export PLAN_ENCRYPTION_KEY="wrong"; tfpls_unpack "$f" "$T/u2" ) && bad "wrong key accepted" || ok "wrong key refused"
-# tampered byte
-cp "$f" "$T/tampered.enc"; printf '\x00' | dd of="$T/tampered.enc" bs=1 seek=200 conv=notrunc 2>/dev/null
+# tampered byte: tamper_byte writes the complement of the byte, so the file ALWAYS changes (a fixed value would leave the file
+# untouched whenever that byte of the random ciphertext already has it, about 1 run in 256)
+tamper_byte() { # <file> <offset>
+  local b; b=$(dd if="$1" bs=1 skip="$2" count=1 2>/dev/null | od -An -tu1 | tr -d ' ')
+  printf "$(printf '\\%03o' $(( b ^ 255 )))" | dd of="$1" bs=1 seek="$2" conv=notrunc 2>/dev/null
+}
+for v in '\x00' '\xff' '\x5a'; do
+  printf "$v$v$v" > "$T/h.bin"; cp "$T/h.bin" "$T/h.orig"; tamper_byte "$T/h.bin" 1
+  cmp -s "$T/h.bin" "$T/h.orig" && bad "tamper_byte left a file with the byte $v unchanged" || ok "tamper_byte changes a byte that is $v"
+done
+cp "$f" "$T/tampered.enc"; tamper_byte "$T/tampered.enc" 200
 tfpls_unpack "$T/tampered.enc" "$T/u3" >/dev/null 2>&1 && bad "tampered file accepted" || ok "tampered file refused"
 # truncated
 head -c 100 "$f" > "$T/trunc.enc"; tfpls_unpack "$T/trunc.enc" "$T/u4" >/dev/null 2>&1 && bad "truncated accepted" || ok "truncated refused"
