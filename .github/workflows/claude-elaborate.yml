@@ -56,7 +56,7 @@ jobs:
       issue_md: ${{ steps.pack.outputs.issue_md }}
     steps:
       # the default branch: the gate and the rules come from there, never from the issue
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - id: g
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false   # nothing in this job pushes: no token is left in .git/config
       - name: Stop with a message when the Claude token is missing
