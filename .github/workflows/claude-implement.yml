@@ -1,9 +1,10 @@
-# Implementation of an issue by Claude (phase 2 of the issue agent; phase 1 is claude-elaborate.yml).
-#   - the repository owner comments `/implement` on an issue labelled `ready` (words after it are instructions for the run);
+# Implementation of an issue by Claude (phase 2 of the issue agent; phase 1 is claude-elaborate.yml). The flow: CONTRIBUTING.md, "Issue agent".
+#   - the repository owner comments `/implement` on an issue labelled `ready` (words after it are instructions for the run); a
+#     filled-in issue without open questions is labelled `ready` by the gate; anyone else gets the reason in a comment (owner only);
 #   - Claude works on a branch `agent/issue-<n>`: tests first, then the change, docs and changelog, runs the checks, and opens a
 #     pull request for the owner to review (TLDR: what, why, how). It never merges, releases, tags or closes the issue.
 # Cost: the job `if:` below costs nothing, the `gate` job (tools/agent-gate.sh) refuses in seconds (not owner, not ready, open
-# questions, kill switch, run caps), and only then the `agent` job runs, with a turn limit and a time limit.
+# questions, kill switch, run caps) and says why on the issue, and only then the `agent` job runs, with a turn limit and a time limit.
 # Switch it off without a pull request: repository variable TFPLS_AGENT_ENABLED=false. The model: TFPLS_AGENT_MODEL_IMPLEMENT.
 # Test a change to the agent from its branch: `gh workflow run claude-implement.yml --ref <branch> -f issue=<n>` (owner only; the same gate).
 # Needs the repository secret CLAUDE_CODE_OAUTH_TOKEN and the Claude GitHub app (the pull request is opened with its token, so that
@@ -41,19 +42,23 @@ permissions:
 
 jobs:
   gate:
-    # free pre-filter (no runner is started when it does not match): the owner, the exact command
+    # free pre-filter (no runner is started when it does not match): a comment that starts with /implement, from anyone (the gate
+    # starts nothing for anyone but the owner and says why), and the owner's manual run
     if: >-
       github.event.issue.pull_request == null &&
       github.event.sender.type != 'Bot' &&
       vars.TFPLS_AGENT_ENABLED != 'false' &&
       (
-        (github.event_name == 'issue_comment' &&
-         github.event.comment.author_association == 'OWNER' &&
-         (github.event.comment.body == '/implement' || startsWith(github.event.comment.body, '/implement '))) ||
+        (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/implement')) ||
         (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner)
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # the gate reads, comments and labels; it needs no OIDC token and no write access to the code
+    permissions:
+      contents: read
+      issues: write
+      actions: read
     outputs:
       run: ${{ steps.g.outputs.run }}
       issue_md: ${{ steps.pack.outputs.issue_md }}
@@ -61,6 +66,8 @@ jobs:
     steps:
       # the default branch: the gate and the rules come from there, never from the issue
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: g
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,13 +81,20 @@ jobs:
           MAX_IMPL_ISSUE: ${{ vars.TFPLS_AGENT_MAX_IMPL_PER_ISSUE }}
           MAX_IMPL_DAY: ${{ vars.TFPLS_AGENT_MAX_IMPL_PER_DAY }}
         run: bash tools/agent-gate.sh implement
-      - name: Say why nothing runs
+      - name: Say why nothing runs and what happens next (once per reason)
         if: steps.g.outputs.comment_file != ''
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE: ${{ github.event.issue.number || inputs.issue }}
           FILE: ${{ steps.g.outputs.comment_file }}
         run: gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$FILE"
+      - name: Label a filled-in issue ready (it has no open questions)
+        if: steps.g.outputs.label != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number || inputs.issue }}
+          LABEL: ${{ steps.g.outputs.label }}
+        run: gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$ISSUE/labels" -f "labels[]=$LABEL" --silent
       # the prepared issue and the owner's words travel to the agent job as job outputs (random delimiters)
       - id: pack
         if: steps.g.outputs.run == 'true'
@@ -97,7 +111,11 @@ jobs:
 
   agent:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    # the gate decides; the owner check is repeated here, so that nobody but the owner can ever start an implementation
+    if: >-
+      needs.gate.outputs.run == 'true' &&
+      (github.event.comment.author_association == 'OWNER' ||
+       (github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -111,7 +129,8 @@ jobs:
           ISSUE: ${{ github.event.issue.number || inputs.issue }}
         run: |
           if [ "$HAS_TOKEN" != true ]; then
-            gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body "The issue agent did not run: the repository secret \`CLAUDE_CODE_OAUTH_TOKEN\` is not set (see CONTRIBUTING.md)." || true
+            gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body "The issue agent did not run: the repository secret \`CLAUDE_CODE_OAUTH_TOKEN\` is not set (see CONTRIBUTING.md).
+          **Next:** the owner sets the secret and comments \`/implement\` again." || true
             echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set"; exit 1
           fi
       - name: Write the prepared issue and the owner's instructions
@@ -154,7 +173,7 @@ jobs:
             as soon as the pull request is open. Open it with `gh pr create` using the pull request template, with the
             TLDR (what, why, how) first, `Refs #${{ github.event.issue.number || inputs.issue }}` (never a closing keyword), the decisions,
             the exact verification commands with their results, and an honest "not verified" list. Never merge, tag,
-            release or close the issue.
+            release or close the issue. Your comment on the issue ends with the **Next:** line of AGENTS.md.
           # the tool lists must be quoted: the action splits unquoted arguments on spaces
           claude_args: |
             --max-turns 60
