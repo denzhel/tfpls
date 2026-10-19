@@ -10,7 +10,7 @@ on:
       runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","dedicated-terraform"]' }
       workspaces: { type: string, default: "", description: "names (or labels) of the workspaces whose lock is released; empty = only show the locks" }
       audit: { type: boolean, default: true, description: "append an audit event for every lock released by name (the caller needs contents: write)" }
-      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.10.6" }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.13.1" }
       timeout_minutes: { type: number, default: 60, description: "time limit of the whole check (workspaces are checked one after the other, 10 minutes each at most)" }
       apply_environment: { type: string, default: "", description: "GitHub Environment that holds the apply credentials" }
     secrets:

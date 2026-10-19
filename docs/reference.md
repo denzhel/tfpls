@@ -137,7 +137,7 @@ Everything the caller can set, with `with:` on the `tofu.yml` job. The default `
 |---|---|---|
 | `runs_on` | `ubuntu-latest` | runner label, or a JSON array of labels |
 | `config` | `.tfpls.yml` | path of the config file |
-| `tofu_version` | detected | OpenTofu version: by default read from `.opentofu-version`, `.tofu-version`, `.terraform-version` or an exact `required_version`, else 1.10.6 |
+| `tofu_version` | detected | OpenTofu version: by default read from `.opentofu-version`, `.tofu-version`, `.terraform-version` or an exact `required_version`, else 1.13.1 |
 | `apply_environment` | none | GitHub Environment used by apply-capable jobs (apply, unlock, drift remediation, the `locks` task) |
 | `audit` | `true` | append an [audit event](audit.md) per apply, drift check and unlock to the `tfpls-data` branch (needs `contents: write`) |
 | `drift_issues` | `true` | open and close one issue per drifted workspace, see [drift.md](drift.md) (alerts are sent on transitions either way) |

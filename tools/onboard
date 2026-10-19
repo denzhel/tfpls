@@ -147,7 +147,7 @@ fi
 pinned=""
 for f in .opentofu-version .tofu-version .terraform-version; do [ -s "$f" ] && { pinned="$f ($(head -n1 "$f" | tr -d 'v \r'))"; break; }; done
 if [ -n "$pinned" ]; then ok "OpenTofu version from $pinned"
-else info "OpenTofu version is not pinned: 1.10.6 will be used (add a .opentofu-version file to choose)"; fi
+else info "OpenTofu version is not pinned: 1.13.1 will be used (add a .opentofu-version file to choose)"; fi
 
 # ---- the repository on GitHub (for the trust policy), read from the remote with a strict pattern
 owner=""; repo=""
