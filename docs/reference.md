@@ -161,8 +161,6 @@ Every plan run and every apply posts a **new** comment for its workspace; the ne
 **Plan:** 1 to add, 1 to change, 0 to destroy.
 ### 📝 [dev](https://github.com/OWNER/REPO/actions/runs/123) plan logs
 
-> ⚠️ **1 resource(s) will be destroyed or replaced:** `aws_s3_bucket.data` (replace)
-
 <details><summary>Click here to expand</summary>
 
 ```terraform
@@ -178,7 +176,7 @@ Every plan run and every apply posts a **new** comment for its workspace; the ne
 
 - The first line is OpenTofu's own `Plan:` line. The heading links to the run and says `apply logs` after an apply; a clean run says `**No changes.**` and has nothing to expand, a failed one shows the error text and a hint instead of a plan.
 - The collapsed plan is `tofu show` of the saved plan: only what changes (updated resources list the changed attributes, `# (N unchanged attributes hidden)`), no `Refreshing state...` lines. **Sensitive values are never shown** (`(sensitive)`), unknown values appear as `(known after apply)`.
-- The warning about destroyed or replaced resources, policy and reviewed-plan notices stay above the collapsed plan.
+- Policy and reviewed-plan notices stay above the collapsed plan; what the change destroys or replaces is in the `Plan:` line and the plan itself.
 - Under the marker line the comment has a hidden `<!-- tfpls-status: planned -->` line (`planned`, `applied`, `no-changes`, `error`, ...), for tools that read the comments; the pipelines themselves do not depend on it.
 
 A plan that is too long for a pull request comment (GitHub's limit is 65,536 characters) is clipped in the collapsed section to its beginning and its end, where the `Plan: N to add...` summary is, with a note; the full text is in the run logs. When a later commit of the PR no longer changes a workspace (computed against the PR's base branch, so for example the change was reverted or a shared file that selected everything was removed), its newest comment gets an **Outdated** banner (the old plan stays below it for reference), so a stale plan is never mistaken for a current one; planning that workspace again posts a new comment without the banner.

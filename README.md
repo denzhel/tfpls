@@ -14,8 +14,6 @@
 **Plan:** 1 to add, 1 to change, 0 to destroy.
 ### 📝 dev plan logs
 
-> ⚠️ **1 resource(s) will be destroyed or replaced:** `aws_s3_bucket.data` (replace)
-
 <details><summary>Click here to expand</summary> … only what changes, sensitive values hidden … </details>
 
 `/tofu apply dev` to apply

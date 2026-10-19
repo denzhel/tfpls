@@ -7,6 +7,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 ## Unreleased
 
 - **Fixed:** a pull request plan could also plan workspaces the pull request did not change when the base branch moved on right after the pull request was opened (the diff included what the base branch gained). detect-workspaces has a new optional input `head_ref`, and `plan.yml` passes the pull request's own head, so only the pull request's own changes select workspaces.
+- **Changed:** plan and apply comments no longer start with the line `⚠️ N resource(s) will be destroyed or replaced: ...`. What is destroyed or replaced stays in the `Plan: N to add, N to change, N to destroy` line and in the plan itself. The `banner` mode of `actions/tofu/summarize.sh` and `render.jq` are removed.
 - **Changed:** the apply after a merge now comments its result on the merged pull request (applied, no changes, policy failure, error, or why it was not applied). The `apply.yml` job asks for `pull-requests: write`, which the caller written by `tools/onboard` already grants. A direct push posts nothing.
 
 ## v0.3.0

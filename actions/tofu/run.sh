@@ -37,7 +37,7 @@ plan_text_out() {
 
 tfpls_load_entry
 AUTO_APPLY="${AUTO_APPLY:-never}"
-status=error; additive=false; summary=""; body_extra=""; counts=""; destroy_banner=""; changes="[]"; changes_more=0
+status=error; additive=false; summary=""; body_extra=""; counts=""; changes="[]"; changes_more=0
 reviewed_used=false; plan_note=""
 # set when this run is the re-plan fallback after a stale reviewed plan (see the apply step)
 if [ -n "${PLAN_FALLBACK_NOTE:-}" ]; then body_extra="⚠️ ${PLAN_FALLBACK_NOTE}"; plan_note="**${NAME}**: ${PLAN_FALLBACK_NOTE}"; fi
@@ -68,9 +68,7 @@ comment() {
   # a successful apply shows what the apply did (not the plan again)
   [ "$status" = applied ] && [ -s "$REPO_ROOT/$DIR/apply_view.txt" ] && shown="$REPO_ROOT/$DIR/apply_view.txt"
   while :; do
-    body=$(tfpls_comment_body "$marker" "$icon" "$status" "${LABEL:-$NAME}" "$RUN_URL" "$shown" "$summary" "${destroy_banner:+$destroy_banner
-
-}$body_extra" "$limit")
+    body=$(tfpls_comment_body "$marker" "$icon" "$status" "${LABEL:-$NAME}" "$RUN_URL" "$shown" "$summary" "$body_extra" "$limit")
     # GitHub rejects comments over 65536 characters: shrink the plan until the whole comment fits
     if [ "$(printf '%s' "$body" | wc -c | tr -d ' ')" -le 62000 ] || [ "$limit" -le 4000 ]; then break; fi
     limit=$((limit / 2))
@@ -191,7 +189,7 @@ if [ "$rc" -eq 0 ]; then status=no-changes; summary="No changes."; finish; fi
 # the readable plan for the comment: tofu's own rendering has no "Refreshing state..." lines; if it fails, filter the console output
 tofu show -no-color tfplan > show.txt 2>/dev/null || tfpls_strip_refresh < plan.txt > show.txt
 tofu show -json tfplan > plan.json
-# the plan is summarized once; header, counts, the destroy warning and the changed addresses all come from that JSON
+# the plan is summarized once; header, counts and the changed addresses all come from that JSON
 sjson=$("$here/summarize.sh" plan.json json 2>/dev/null) || sjson=""
 summary=$(jq -r .header <<<"$sjson" 2>/dev/null) || summary=""
 counts=$(jq -c .counts <<<"$sjson" 2>/dev/null) || counts=""
@@ -199,8 +197,6 @@ counts=$(jq -c .counts <<<"$sjson" 2>/dev/null) || counts=""
 changes_all=$(jq -c '[.resources[]? | {action: ({"create":"added","update":"changed","delete":"deleted","replace":"replaced"}[.action] // .action), address}]' <<<"$sjson" 2>/dev/null) || changes_all="[]"
 changes=$(jq -c '.[0:50]' <<<"$changes_all" 2>/dev/null) || changes="[]"
 changes_more=$(jq -r '[length - 50, 0] | max' <<<"$changes_all" 2>/dev/null) || changes_more=0
-# the warning about destroyed/replaced resources stays visible above the collapsed plan
-destroy_banner=$("$here/summarize.sh" - banner <<<"$sjson" 2>/dev/null) || destroy_banner=""
 [ -n "$summary" ] || summary="(could not summarize the plan, see the full plan below)"
 if jq -e '[.resource_changes[]?.change.actions] | all(. == ["create"] or . == ["no-op"] or . == ["read"])' plan.json >/dev/null; then
   additive=true
