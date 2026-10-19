@@ -1,6 +1,6 @@
 # Reusable: after merge, plan + apply workspaces per their auto_apply setting.
 # Caller needs: on: push (default branch); permissions: contents: write (audit), id-token: write,
-#   actions: read (finds the reviewed plan artifact), pull-requests: read
+#   actions: read (finds the reviewed plan artifact), pull-requests: write (comments the result on the merged pull request)
 # Per-workspace runs are serialized (concurrency group, never cancelled) so applies queue FIFO-ish
 # (GitHub keeps only one pending run per group; see docs/reference.md "Concurrency").
 name: tfpls apply
@@ -31,19 +31,22 @@ jobs:
       any: ${{ steps.d.outputs.any }}
       entries: ${{ steps.d.outputs.entries }}
       head_sha: ${{ steps.pr.outputs.head_sha }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { fetch-depth: 0, persist-credentials: false }
-      # the PR this commit was merged from: its head SHA keys the reviewed plan (empty for direct pushes)
+      # the PR this commit was merged from: its head SHA keys the reviewed plan and its number gets the result comment (both empty for direct pushes)
       - id: pr
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
         run: |
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[] | select(.merged_at != null)] | .[0].head.sha // ""' 2>/dev/null || true)
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[] | select(.merged_at != null)] | .[0] | "\(.head.sha // "")|\(.number // "")"' 2>/dev/null || true)
+          sha=${pr%%|*}; num=${pr#*|}
           echo "head_sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "merged PR head SHA: ${sha:-<none, direct push>}"
+          echo "pr_number=$num" >> "$GITHUB_OUTPUT"
+          if [ -n "$num" ]; then echo "merged PR: #$num (head SHA $sha)"; else echo "merged PR: none, direct push"; fi
       - id: d
         uses: denzhel/tfpls/actions/detect-workspaces@main
         with:
@@ -56,7 +59,7 @@ jobs:
     if: needs.detect.outputs.any == 'true'
     environment: ${{ inputs.apply_environment || null }}
     # least privilege: only what this job calls the API for (a subset of what the caller grants)
-    permissions: { contents: write, pull-requests: read, id-token: write, actions: read }
+    permissions: { contents: write, pull-requests: write, id-token: write, actions: read }
     runs-on: ${{ startsWith(inputs.runs_on, '[') && fromJSON(inputs.runs_on) || inputs.runs_on }}
     timeout-minutes: ${{ inputs.timeout_minutes }}
     strategy:
@@ -92,6 +95,7 @@ jobs:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           apply: auto
           head_sha: ${{ needs.detect.outputs.head_sha }}
+          pr_number: ${{ needs.detect.outputs.pr_number }}   # the result of the apply is commented on the merged pull request
           # apply the reviewed PR plan when it is still valid; require_reviewed_plan: true blocks instead of re-planning
           plan_mode: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].require_reviewed_plan == 'true' && 'reviewed_only' || 'reviewed' }}
           plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
