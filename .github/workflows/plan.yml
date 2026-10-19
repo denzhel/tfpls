@@ -60,6 +60,7 @@ jobs:
           config: ${{ inputs.config }}
           mode: ${{ steps.intro.outputs.introduced == 'true' && 'all' || 'changed' }}
           base_ref: ${{ github.event.pull_request.base.sha }}
+          head_ref: ${{ github.event.pull_request.head.sha }}   # the diff is the pull request's own changes, even if the base moved on since it was opened
       # nothing configured and nothing found: say so on the pull request (and remove the note again once workspaces exist)
       - if: steps.fork.outputs.is_fork != 'true' && steps.d.outputs.configured == '0'
         uses: denzhel/tfpls/actions/pr-notes@main
