@@ -7,8 +7,8 @@
 # TFPLS_TOOL_CACHE, TFPLS_RETRY_DELAY (seconds), TFPLS_OS, TFPLS_ARCH.
 set -euo pipefail
 
-TOFU_VERSION="${TOFU_VERSION:-1.10.6}"
-CONFTEST_VERSION="${CONFTEST_VERSION:-0.56.0}"
+TOFU_VERSION="${TOFU_VERSION:-1.13.1}"
+CONFTEST_VERSION="${CONFTEST_VERSION:-0.71.1}"
 TOFU_BASE="${TFPLS_TOFU_BASE_URL:-https://github.com/opentofu/opentofu/releases/download}"
 CONFTEST_BASE="${TFPLS_CONFTEST_BASE_URL:-https://github.com/open-policy-agent/conftest/releases/download}"
 CACHE="${TFPLS_TOOL_CACHE:-${RUNNER_TOOL_CACHE:-${HOME}/.cache}/tfpls}"

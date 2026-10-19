@@ -31,7 +31,7 @@ Conventions that need no configuration:
 |---|---|
 | Layout | root module, one workspace per `workspaces/*` directory, a change inside it selects only that workspace |
 | Apply | never automatic: a person comments `/tofu apply` on an approved pull request |
-| OpenTofu version | `.opentofu-version`, `.tofu-version`, `.terraform-version` or an exact `required_version`, else 1.10.6 |
+| OpenTofu version | `.opentofu-version`, `.tofu-version`, `.terraform-version` or an exact `required_version`, else 1.13.1 |
 | New workspaces | a tofu workspace that does not exist yet fails with "workspace ... does not exist: create it once with `tofu workspace new <name>`": tfpls never creates a workspace, so a typo cannot create empty state |
 | Cloud credentials | one IAM role from the variable `TFPLS_ROLE_ARN` (OIDC), or the secret `TFPLS_ENV_JSON`; every job uses the same one |
 

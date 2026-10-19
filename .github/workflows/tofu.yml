@@ -15,7 +15,7 @@ on:
     inputs:
       runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","tofu"]' }
       config: { type: string, default: .tfpls.yml, description: "config file with defaults and overrides (optional)" }
-      tofu_version: { type: string, default: "", description: "empty = .opentofu-version / .terraform-version / an exact required_version, else 1.10.6" }
+      tofu_version: { type: string, default: "", description: "empty = .opentofu-version / .terraform-version / an exact required_version, else 1.13.1" }
       apply_environment: { type: string, default: "", description: "GitHub Environment that holds the apply credentials (required reviewers)" }
       audit: { type: boolean, default: true, description: "append an audit event per apply, drift check and unlock to the tfpls-data branch" }
       drift_issues: { type: boolean, default: true, description: "one issue per drifted workspace (alerts are sent on transitions either way)" }

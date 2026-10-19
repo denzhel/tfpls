@@ -7,6 +7,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 ## Unreleased
 
 - **Changed:** the pinned actions are at their latest releases: `actions/checkout` v7.0.1, `actions/upload-artifact` v7.0.2, `anthropics/claude-code-action` v1.0.253 (all by SHA). Self-hosted runners still need v2.327.1 or newer.
+- **Changed:** the default tool versions are the latest: OpenTofu 1.13.1 (was 1.10.6) and conftest 0.71.1 (was 0.56.0). A repository that pins its OpenTofu version (`.opentofu-version`, `.tofu-version`, `.terraform-version` or an exact `required_version`) is not affected; one that does not gets 1.13.1, and a reviewed plan saved with another version is refused and must be planned again (the existing "tofu version change" message).
 - Maintainers: `tests/plan-store.test.sh` no longer fails by chance (about one run in 256): the tamper check now always changes the byte instead of writing a fixed value.
 - **Docs:** "Apply before merge: the window" in `docs/runbooks.md`: between `/tofu apply` and the merge the state is ahead of the default branch, other pull requests' plans show a spurious undo, and on an `auto_apply: always` workspace another merge can destroy what was applied. The safe order is written down.
 - **Changed:** the actions tfpls uses run on Node.js 24, so GitHub's "Node.js 20 is deprecated" warning is gone: `actions/checkout` v5.1.0, `actions/upload-artifact` v6.0.0, `actions/upload-pages-artifact` v5.0.0, `actions/deploy-pages` v5.0.1 (all pinned by SHA). **Self-hosted runners must be v2.327.1 or newer.**

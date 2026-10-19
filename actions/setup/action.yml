@@ -2,11 +2,11 @@ name: tfpls setup
 description: Install OpenTofu and conftest (retried downloads, SHA-256 verified, cached on the runner)
 inputs:
   tofu_version:
-    description: "OpenTofu version. Empty = the version the repository asks for (.opentofu-version, .tofu-version, .terraform-version or an exact required_version), else 1.10.6"
+    description: "OpenTofu version. Empty = the version the repository asks for (.opentofu-version, .tofu-version, .terraform-version or an exact required_version), else 1.13.1"
     default: ""
   conftest_version:
     description: conftest version
-    default: "0.56.0"
+    default: "0.71.1"
   conftest:
     description: "install conftest (only needed when the workspace has a policy_dir or policy_packs)"
     default: "true"
@@ -23,7 +23,7 @@ runs:
         if [ -z "$TOFU_VERSION" ]; then
           TOFU_VERSION=$(${{ github.action_path }}/detect-version.sh "$GITHUB_WORKSPACE")
           if [ -n "$TOFU_VERSION" ]; then echo "::notice::OpenTofu $TOFU_VERSION (asked for by the repository)"
-          else TOFU_VERSION=1.10.6; echo "::notice::OpenTofu $TOFU_VERSION (default; add .opentofu-version to choose)"; fi
+          else TOFU_VERSION=1.13.1; echo "::notice::OpenTofu $TOFU_VERSION (default; add .opentofu-version to choose)"; fi
         fi
         export TOFU_VERSION
         ${{ github.action_path }}/install.sh
