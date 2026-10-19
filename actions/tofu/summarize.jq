@@ -1,5 +1,5 @@
-# Summarize a `tofu show -json` plan: counts, the header line and what is destroyed or replaced. Addresses and actions only, never values.
-# Input: the plan JSON.  Output: {header, counts, destroyed: [{address, kind}], resources: [{address, action}]}
+# Summarize a `tofu show -json` plan: counts, the header line and the changed addresses. Addresses and actions only, never values.
+# Input: the plan JSON.  Output: {header, counts, resources: [{address, action}]}
 
 def action_of($acts):
   if $acts == ["create"] then "create"
@@ -19,6 +19,5 @@ def action_of($acts):
 | {
     counts: {add: $add, change: $chg, destroy: $del, replace: $rep},
     header: ("+\($add) ~\($chg) -\($del)" + (if $rep > 0 then " (\($rep) replace)" else "" end)),
-    destroyed: [ $rc[] | select(.kind == "delete" or .kind == "replace") | {address, kind} ],
     resources: [ $rc[] | {address, action: .kind} ]
   }
