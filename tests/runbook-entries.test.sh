@@ -13,4 +13,10 @@ check "the runbook has the 403-on-refresh entry" docs/runbooks.md "## Every plan
 check "the runbook links to the credentials section" docs/runbooks.md "credentials.md#resource-read-is-more-than-describe"
 check "credentials links to the runbook entry" docs/credentials.md "runbooks.md#every-plan-of-a-workspace-fails-with-a-403-on-refresh"
 
+check "reviewed-plans explains what a plan contains" docs/reviewed-plans.md "## What a plan contains"
+check "the runbook has the entry for a plan bigger than the diff" docs/runbooks.md "## The plan shows resources my pull request did not change"
+check "the runbook links to the reviewed-plans section" docs/runbooks.md "reviewed-plans.md#what-a-plan-contains"
+check "reviewed-plans links to the runbook entry" docs/reviewed-plans.md "runbooks.md#the-plan-shows-resources-my-pull-request-did-not-change"
+check "the auto_apply reference links to it" docs/reference.md "reviewed-plans.md#what-a-plan-contains"
+
 done_tests
