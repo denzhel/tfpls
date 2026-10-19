@@ -58,7 +58,7 @@ Job titles, PR comment headings and Slack messages use just the workspace name (
 | `notify_template` | built-in Slack message | Path of a jq file that builds the webhook body from the run JSON (empty output sends nothing), see [notifications.md](notifications.md#your-own-message-notify_template) |
 | `overrides` | none | Map of workspace glob to any of the settings above |
 
-`additive_only` auto-applies only if every resource change is `create`, `no-op` or `read`. Updates, deletes and replacements require a human.
+`additive_only` auto-applies only if every resource change is `create`, `no-op` or `read`. Updates, deletes and replacements require a human; until one applies them they stay in the plan of every later pull request of that workspace ([what a plan contains](reviewed-plans.md#what-a-plan-contains)).
 
 ## Removed settings
 

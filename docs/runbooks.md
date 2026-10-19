@@ -27,6 +27,15 @@ What a first pull request shows and what to do. Everything is explained on the p
 1. `/tofu plan <workspace>` and review the new plan; apply that.
 2. With `auto_apply` on merge this is automatic: the run plans again and applies under the same rule.
 
+## The plan shows resources my pull request did not change
+The `Plan:` line counts more than the pull request touches, or the plan lists resources that are not in the diff.
+
+**Why**: a plan is the state against the merged result, not the pull request's diff. An earlier change that was merged but never applied (`auto_apply: never`, or an update or delete that `additive_only` left to a person) is part of every later plan of that workspace, and `/tofu apply` applies all of it.
+1. Read the whole plan; it is exactly what will be applied.
+2. If the extra changes are not wanted, revert them on the default branch in a pull request of their own, then re-plan.
+3. If they are, apply knowingly, or apply them first through their own pull request that touches the workspace.
+4. Details: [reviewed plans](reviewed-plans.md#what-a-plan-contains).
+
 ## Every plan of a workspace fails with a 403 on refresh
 The plan comment says `plan failed`; the run log has `Error: reading <resource> ...: StatusCode: 403` (for example `reading EC2 Managed Prefix List (pl-...) Entries`).
 

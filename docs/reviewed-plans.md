@@ -26,6 +26,14 @@ stacks:
 
 The caller workflow needs `actions: read` (to find and download the artifact). Nothing else changes in everyday use: plan comments and policy checks behave as before, plus one line saying the reviewed plan was saved.
 
+## What a plan contains
+
+A plan is the difference between the **state** of the workspace and the **merged result** of the pull request (its code on top of the default branch). It is not the pull request's diff. So a plan can also contain changes that are already on the default branch but were never applied: with `auto_apply: never` a merge applies nothing, and with `additive_only` a merged update or delete is left to a person. The next pull request that touches the workspace plans them too, and `/tofu apply` applies the whole plan, including them.
+
+Example from a test repository: a pull request added one prefix list to a `never` workspace. Its plan said `2 to add`, because a launch template merged earlier had never been applied, and `/tofu apply` created both.
+
+How to recognise it: the counts in the `Plan:` line are larger than what the pull request changes, or the plan lists resources the diff does not mention. What to do: read the whole plan, it is what will be applied. If the extra changes are not wanted, revert them on the default branch first. If they are, apply knowingly, or apply them first through a pull request of their own that touches the workspace. See [the runbook](runbooks.md#the-plan-shows-resources-my-pull-request-did-not-change).
+
 ## Why encrypt
 
 A saved plan is a binary file that can contain **secret values in plaintext** (database passwords, generated keys, anything marked sensitive). Workflow artifacts can be downloaded by **anyone with read access to the repository**. Encrypting the plan keeps those values out of reach, and the integrity check means a tampered or swapped plan is refused.
