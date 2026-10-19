@@ -28,7 +28,7 @@ jobs:
           tar -xzf /tmp/actionlint.tgz -C /tmp actionlint && sudo install /tmp/actionlint /usr/local/bin/actionlint
       - name: actionlint
         run: |
-          actionlint -color
+          actionlint -color -ignore 'label "ubuntu-26.04" is unknown'
       - name: shellcheck
         run: shellcheck -S warning actions/*/*.sh tools/* tests/*.sh
       - name: yaml parses
