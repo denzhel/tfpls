@@ -8,6 +8,7 @@ Start with [getting started](getting-started.md), keep the [runbooks](runbooks.m
 | look up a setting, an input or a `/tofu` command | [reference.md](reference.md) |
 | understand how a change travels from PR to apply | [flow](#the-flow) below, [reviewed-plans.md](reviewed-plans.md) |
 | know what runs with which credentials | [security-model.md](security-model.md), [credentials.md](credentials.md) |
+| know which security scanners run, and what is AI in them | [automated scanning](security-model.md#automated-scanning) |
 | move from a hand-run `tofu` workflow | [migration.md](migration.md) |
 | fix something that is stuck or broken | [runbooks.md](runbooks.md) |
 | budget runner minutes | [runner-minutes.md](runner-minutes.md) |
