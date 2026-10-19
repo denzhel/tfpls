@@ -27,6 +27,18 @@ What a first pull request shows and what to do. Everything is explained on the p
 1. `/tofu plan <workspace>` and review the new plan; apply that.
 2. With `auto_apply` on merge this is automatic: the run plans again and applies under the same rule.
 
+## Why did a plan run after my apply?
+You applied a pull request with `/tofu apply`, merged it, and the run after the merge planned the workspace again.
+
+**Why**: the run after a merge applies the pull request's reviewed plan, and OpenTofu applies a saved plan only once. After `/tofu apply` that plan is used up.
+- **Before** (up to v0.3.0): the run tried the used-up plan anyway. OpenTofu refused it as stale before changing anything, the log said `reviewed plan is stale; re-planning`, and the run planned again, usually finding no changes. On `main`, after the run after a merge started to comment on the pull request and before this was fixed, that plan also showed up as a second comment headed `plan logs`. With `require_reviewed_plan: true` the run failed instead (`The state changed after the plan was made`), and with `additive_only` a change that is not additive was reported as not auto-applied, although it had been applied. Nothing was ever applied twice.
+- **Now**: the run reads the pull request's comments first. When the bot's newest comment of the workspace with the status `applied` is newer than its newest `planned` one, the run does not try the used-up plan. It plans once, only to confirm that nothing is left: that plan refreshes the state and shows that the default branch and the state agree, so it is kept on purpose.
+
+What you see now:
+1. One line, `🟢 dev: Already applied by /tofu apply (run); nothing changed since.`: nothing to do.
+2. The usual comment with the note `Already applied by /tofu apply ...`: something changed after the apply and was never planned (a commit whose plan failed, drift, or a `-target` apply that left the rest). It is handled under `auto_apply`, like any merge without a usable reviewed plan. With `require_reviewed_plan: true` it is not applied and the run fails: apply it through a new pull request, or from the [drift issue](drift.md) once the next drift check reports it.
+3. A commit pushed and planned after the apply gets a newer plan comment, so the merge applies that reviewed plan as usual; the one-line comment never hides it.
+
 ## Apply before merge: the window
 `/tofu apply` applies a pull request's plan before the pull request is merged, so until the merge the **state is ahead of the default branch**. In that window:
 - plans of other pull requests of the same workspace show your applied change as something to undo (a destroy, or an update back) next to their own change, so their counts are larger than their diff;

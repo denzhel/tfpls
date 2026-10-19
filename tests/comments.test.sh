@@ -102,6 +102,13 @@ b=$(tfpls_comment_body "$M" "📝" planned dev "https://run/9" "$T/show.txt" "" 
 [ "$(sed -n 3p <<<"$b")" = "**Plan:** 1 to add, 1 to change, 0 to destroy." ] && ok "a plan comment keeps the plan line (negative case)" || bad "plan line changed"
 b=$(tfpls_comment_body "$M" "❌" error dev "https://run/9" "$T/err.txt" "apply failed" "" 45000)
 [ "$(sed -n 3p <<<"$b")" = "**apply failed**" ] && grep -q 'Error: boom' <<<"$b" && ok "a failed apply keeps its error text (negative case)" || bad "error comment changed"
+
+# ---- the compact comment of the apply after a merge, when `/tofu apply` had applied the workspace and nothing changed since
+b=$(tfpls_already_applied_body "$M" dev "https://run/222" "https://run/111")
+[ "$(sed -n 1p <<<"$b")" = "$M" ] && [ "$(sed -n 2p <<<"$b")" = "<!-- tfpls-status: no-changes -->" ] && ok "the compact comment keeps the marker line and the status no-changes" || bad "compact head: $(head -2 <<<"$b")"
+[ "$(sed -n 3p <<<"$b")" = '🟢 **[dev](https://run/222)**: Already applied by `/tofu apply` ([run](https://run/111)); nothing changed since.' ] \
+  && ok "the compact comment is one line: the workspace links this run, the sentence links the /tofu apply run" || bad "compact line: $(sed -n 3p <<<"$b")"
+[ "$(printf '%s\n' "$b" | wc -l | tr -d ' ')" = 3 ] && ! grep -q '<details>\|plan logs\|to apply$' <<<"$b" && ok "the compact comment has no plan section, no 'plan logs' heading and no apply hint" || bad "compact body: $b"
 RS="$here/actions/tofu/run.sh"
 grep -q 'tfpls_apply_view < apply.txt > apply_view.txt' "$RS" && grep -q 'shown="$REPO_ROOT/$DIR/apply_view.txt"' "$RS" && ok "run.sh builds the apply view after a successful apply and uses it for the comment" || bad "run.sh wiring"
 grep -q 'apply_view.txt init.txt' "$RS" && ok "the apply view file is cleaned up" || bad "cleanup"

@@ -155,6 +155,14 @@ GitHub allows at most 256 jobs in one matrix. A change that selects more workspa
 
 The apply that runs after a merge comments on the merged pull request too (found through the merge commit; a direct push to the default branch has no pull request and posts nothing): an applied workspace shows what was applied, a workspace that is not auto-applied (`auto_apply: never`, or a change `additive_only` leaves to a person) shows why it was not applied. This needs `pull-requests: write` in the caller workflow, which `tools/onboard` writes.
 
+A workspace applied with `/tofu apply` before the merge is not applied again: OpenTofu applies a saved plan only once. The run after the merge reads the pull request's comments first; when the bot's newest comment of the workspace with the status `applied` is newer than its newest `planned` one, it skips the reviewed plan and plans once, only to confirm that nothing is left (that plan also refreshes the state). If nothing is left, its comment is one line, with the status `no-changes`:
+
+```markdown
+🟢 **[dev](https://github.com/OWNER/REPO/actions/runs/124)**: Already applied by `/tofu apply` ([run](https://github.com/OWNER/REPO/actions/runs/123)); nothing changed since.
+```
+
+If something is left (a change after the apply that was never planned, drift, a `-target` apply that left the rest), the comment is the usual one with a note, and the plan is applied under `auto_apply` like any merge without a usable reviewed plan; with `require_reviewed_plan: true` it is not applied and the run fails. A commit planned after the apply has a newer `planned` comment, so its reviewed plan is applied as usual. Only the bot's own comments count, and when they cannot be read the run behaves as before (it tries the reviewed plan). Details: [the runbook](runbooks.md#why-did-a-plan-run-after-my-apply).
+
 Every plan run and every apply posts a **new** comment for its workspace; the newest one is the live one. The older comments of that workspace keep their text and get a banner under the first line: `> 🔁 **Superseded** by <link to the newer comment>. The plan below is kept for reference only.` Only the newest plan comment ends with the `/tofu apply <workspace>` hint; a superseded comment loses it together with getting the banner. The comment of a successful apply shows what the apply did (the resource actions and `Apply complete!`, first line `**Applied:** N added, N changed, N destroyed.`), not the plan again; the `Outputs:` block is never posted to a comment. A plan comment is laid out like this:
 
 ````markdown
@@ -177,7 +185,7 @@ Every plan run and every apply posts a **new** comment for its workspace; the ne
 - The first line is OpenTofu's own `Plan:` line. The heading links to the run and says `apply logs` after an apply; a clean run says `**No changes.**` and has nothing to expand, a failed one shows the error text and a hint instead of a plan.
 - The collapsed plan is `tofu show` of the saved plan: only what changes (updated resources list the changed attributes, `# (N unchanged attributes hidden)`), no `Refreshing state...` lines. **Sensitive values are never shown** (`(sensitive)`), unknown values appear as `(known after apply)`.
 - Policy and reviewed-plan notices stay above the collapsed plan; what the change destroys or replaces is in the `Plan:` line and the plan itself.
-- Under the marker line the comment has a hidden `<!-- tfpls-status: planned -->` line (`planned`, `applied`, `no-changes`, `error`, ...), for tools that read the comments; the pipelines themselves do not depend on it.
+- Under the marker line the comment has a hidden `<!-- tfpls-status: planned -->` line (`planned`, `applied`, `no-changes`, `error`, ...), for tools that read the comments. The run after a merge reads it to tell whether `/tofu apply` already applied the workspace (above); nothing else in the pipelines depends on it.
 
 A plan that is too long for a pull request comment (GitHub's limit is 65,536 characters) is clipped in the collapsed section to its beginning and its end, where the `Plan: N to add...` summary is, with a note; the full text is in the run logs. When a later commit of the PR no longer changes a workspace (computed against the PR's base branch, so for example the change was reverted or a shared file that selected everything was removed), its newest comment gets an **Outdated** banner (the old plan stays below it for reference), so a stale plan is never mistaken for a current one; planning that workspace again posts a new comment without the banner.
 

@@ -67,6 +67,13 @@ tfpls_comment_body() {
   return 0
 }
 
+# tfpls_already_applied_body <marker> <label> <run_url> <apply_url>
+# The comment of the apply after a merge when `/tofu apply` had already applied the workspace and the plan made to confirm it
+# found nothing left: one line, no plan and no hint. The status stays `no-changes`, which is what readers of it saw before.
+tfpls_already_applied_body() {
+  printf '%s\n<!-- tfpls-status: no-changes -->\n🟢 **[%s](%s)**: Already applied by `/tofu apply` ([run](%s)); nothing changed since.\n' "$1" "$2" "$3" "$4"
+}
+
 # tfpls_unencrypted_warns <allow>: succeeds when a plan saved without a key still carries the "not encrypted" warning.
 # The opt-in (allow_unencrypted_plans) only silences the warning; whether an unencrypted plan may be saved at all is decided
 # by the public-repository guard in run.sh, which does not look at the opt-in.

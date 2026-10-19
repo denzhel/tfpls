@@ -7,6 +7,8 @@
 #   reviewed_only  apply ONLY a valid saved plan, never re-plan (/tofu apply, require_reviewed_plan: true)
 # A plan is "reviewed" when it was produced by plan.yml or /tofu plan for this PR head SHA + targets and still
 # matches the code being applied. It is always applied as the saved file, never re-planned.
+# After a merge, a reviewed plan that /tofu apply already applied is consumed: it is not tried again, the run plans once to
+# confirm that nothing is left (see applied_by_comment below).
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=plan-store.sh
@@ -39,6 +41,7 @@ tfpls_load_entry
 AUTO_APPLY="${AUTO_APPLY:-never}"
 status=error; additive=false; summary=""; body_extra=""; counts=""; changes="[]"; changes_more=0
 reviewed_used=false; plan_note=""
+applied_url=""   # set after a merge when /tofu apply already applied this workspace: the link to the run that applied it
 # set when this run is the re-plan fallback after a stale reviewed plan (see the apply step)
 if [ -n "${PLAN_FALLBACK_NOTE:-}" ]; then body_extra="⚠️ ${PLAN_FALLBACK_NOTE}"; plan_note="**${NAME}**: ${PLAN_FALLBACK_NOTE}"; fi
 STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
@@ -58,6 +61,11 @@ echo "credentials: ${TFPLS_CREDENTIALS:-unknown}"
 comment() {
   [ -z "${PR:-}" ] && return 0
   local marker="<!-- tfpls:${NAME} -->" icon
+  # after a merge: /tofu apply had applied this workspace and nothing changed since, so one compact line instead of a plan comment
+  if [ "$status" = no-changes ] && [ -n "$applied_url" ]; then
+    tfpls_post_comment "$marker" "$(tfpls_already_applied_body "$marker" "${LABEL:-$NAME}" "$RUN_URL" "$applied_url")"
+    return 0
+  fi
   case "$status" in
     applied) icon="✅";; no-changes) icon="🟢";; planned) icon="📝";;
     skipped) icon="⏭️";; policy-failed) icon="🛑";; *) icon="❌";;
@@ -124,6 +132,42 @@ case "$APPLY" in
 esac
 [ "$PLAN_MODE" = fresh ] && need_reviewed=false
 
+# ---- the apply after a merge, when /tofu apply already applied this workspace
+# A saved plan can be applied only once: after /tofu apply the reviewed plan is consumed, and applying it again can only fail
+# ("saved plan is stale"). The pull request's comments tell: the bot's newest comment of this workspace with the status `applied`
+# is newer than its newest one with the status `planned` (a commit planned after the apply posts a newer `planned` comment, and
+# that reviewed plan is applied as usual). Only the bot's own comments count, and not the ones of this run (a re-run of the
+# merge run applied it, not /tofu apply). Prints the link to the run that applied when it is a run of this repository, else the
+# link to the apply comment. Best effort: when the comments cannot be read the answer is "no", and the run goes on as before.
+applied_by_comment() {
+  local list
+  list=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" --paginate 2>/dev/null) || return 1
+  jq -rs --arg m "<!-- tfpls:${NAME} -->" --arg self "${RUN_URL:-}" --arg base "${RUN_URL:+${RUN_URL%/*}/}" '
+    [ add // [] | .[] | select(.user.type == "Bot" and ((.body // "") | startswith($m)))
+      | (.body | gsub("\r"; "") | split("\n")) as $l
+      | { id, url: (.html_url // ""),
+          status: ([$l[] | capture("^<!-- tfpls-status: (?<s>[a-z-]+) -->$").s] | first // ""),
+          run: ([$l[] | capture("^### .*\\]\\((?<u>[^()\\s]+)\\) apply logs$").u
+                 | select($base != "" and startswith($base) and (.[($base | length):] | test("^[0-9]+$")))] | first // "") } ]
+    | sort_by(.id)
+    | (map(select(.status == "applied" and (.run == "" or .run != $self))) | last) as $a
+    | (map(select(.status == "planned")) | last) as $p
+    | if $a != null and ($p == null or $a.id > $p.id) then (if $a.run != "" then $a.run else $a.url end) else empty end
+  ' <<<"$list" 2>/dev/null | grep -m1 -E '^https?://[^[:space:]()]+$'
+}
+# Then the reviewed plan is not fetched, and the run plans once, only to confirm that nothing is left (the plan also refreshes the
+# state). Nothing left: one compact comment. Something left (a change after the apply that was not planned, drift, a -target
+# apply): the usual auto_apply rules, except that require_reviewed_plan never applies it (below).
+if [ "$APPLY" = auto ] && [ "$PLAN_MODE" != fresh ] && [ -n "${PR:-}" ] && applied_url=$(applied_by_comment); then
+  need_reviewed=false
+  echo "::notice::the reviewed plan was already applied by /tofu apply ($applied_url); it is not applied again, this run plans once to confirm that nothing is left"
+  plan_note="**$NAME**: already applied by \`/tofu apply\` ($applied_url); the reviewed plan was not applied again, this run planned once to see what is left."
+  body_extra="${body_extra:+$body_extra
+}ℹ️ Already applied by \`/tofu apply\` ([run]($applied_url)), so the reviewed plan was not applied again; this run planned once more to see what is left."
+else
+  applied_url=""
+fi
+
 use_reviewed=false
 if [ "$need_reviewed" = true ]; then
   pname=$(tfpls_plan_name "$NAME" "${HEAD_SHA:-}" "$TARGETS")
@@ -184,7 +228,11 @@ if [ "$rc" -eq 1 ]; then
 }$why"
   finish
 fi
-if [ "$rc" -eq 0 ]; then status=no-changes; summary="No changes."; finish; fi
+if [ "$rc" -eq 0 ]; then
+  status=no-changes; summary="No changes."
+  [ -n "$applied_url" ] && summary="Already applied by \`/tofu apply\`; nothing changed since."
+  finish
+fi
 
 # the readable plan for the comment: tofu's own rendering has no "Refreshing state..." lines; if it fails, filter the console output
 tofu show -no-color tfplan > show.txt 2>/dev/null || tfpls_strip_refresh < plan.txt > show.txt
@@ -287,6 +335,13 @@ case "$APPLY" in
       echo "::notice::auto-apply not allowed for this change (auto_apply=$AUTO_APPLY, additive=$additive)"
     fi;;
 esac
+# require_reviewed_plan never applies a plan made at apply time: what is left after /tofu apply was not reviewed
+if [ "$do_apply" = true ] && [ -n "$applied_url" ] && [ "$PLAN_MODE" = reviewed_only ]; then
+  do_apply=false; status=error
+  summary="No reviewed plan to apply: \`/tofu apply\` already applied the reviewed plan, and a new plan shows changes since then. Apply them through a new pull request, or from the drift issue once the next drift check reports them."
+  plan_note="**$NAME**: refused to apply: \`/tofu apply\` already applied the reviewed plan, and a new plan shows changes since then."
+  echo "::error::No usable reviewed plan: /tofu apply already applied it, and a new plan shows changes since then"
+fi
 
 if [ "$do_apply" = true ]; then
   tofu apply -input=false -no-color -parallelism="${PARALLELISM:-10}" -lock-timeout="${LOCK_TIMEOUT:-0s}" tfplan 2>&1 | tee apply.txt
