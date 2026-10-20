@@ -225,7 +225,7 @@ PY
   grep -q 'Write the new file(s)? \[Y/n\]' <<<"$out" && [ ! -e "$t/p/.github/workflows/tofu.yml" ] && ! grep -q KILLED <<<"$out" && ok "under curl | bash in a terminal the question is read from /dev/tty (answered no: nothing written)" || bad "pty: $out"
   out=$(pty '' --yes --no-jokes "$t/p"); [ -f "$t/p/.github/workflows/tofu.yml" ] && ! grep -q '\[Y/n\]' <<<"$out" && ok "--yes in a terminal: no question, files written" || bad "pty --yes: $out"
   # the helper itself: a child that closes its terminal and is still exiting is waited for, not killed (the race behind the old flake) ...
-  out=$(PTY_CMD='exec >&- 2>&- </dev/null; sleep 0.4; exit 0' pty '' x); ! grep -qE 'KILLED|EXIT' <<<"$out" && ok "pty helper: a child that closed its terminal and is still exiting is waited for" || bad "pty helper killed a finishing child: $out"
+  out=$(PTY_GRACE=0 PTY_CMD='exec >&- 2>&- </dev/null; sleep 0.4; exit 0' pty '' x); ! grep -qE 'KILLED|EXIT' <<<"$out" && ok "pty helper: a child that closed its terminal and is still exiting is waited for" || bad "pty helper killed a finishing child: $out"
   # ... a child that really hangs is still killed and marked, and a failing child reports its exit status
   out=$(PTY_CMD='sleep 30' PTY_DEADLINE=1 PTY_GRACE=1 pty '' x); grep -q KILLED <<<"$out" && ok "pty helper: a child that really hangs is killed and marked" || bad "pty helper did not mark a hanging child: $out"
   out=$(PTY_CMD='echo hi; exit 3' pty '' x); grep -q 'EXIT 3' <<<"$out" && ok "pty helper: a failing child reports its exit status" || bad "pty helper hid an exit status: $out"
