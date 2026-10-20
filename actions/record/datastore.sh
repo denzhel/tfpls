@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared by record.sh and finish/store.sh: change files on the data branch (an orphan branch, created on first
+# KEPT ONLY for finish/store.sh and drift-report until they are ported (Go: internal/datastore). Shared by record.sh and finish/store.sh: change files on the data branch (an orphan branch, created on first
 # use) and push, starting over from the new tip when another run won the race.
 #   tfpls_data_write <writer> <commit message>
 # <writer> is a function that gets the clone directory and edits files in it; nothing to commit is a success.
