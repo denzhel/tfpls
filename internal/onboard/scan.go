@@ -18,7 +18,7 @@ var (
 	backendS3Re   = regexp.MustCompile(`^[[:space:]]*backend[[:space:]]+"s3"`)
 	cloudRe       = regexp.MustCompile(`^[[:space:]]*cloud[[:space:]]*\{`)
 	endpointsRe   = regexp.MustCompile(`^[[:space:]]*endpoints?[[:space:]]*=`)
-	r2Re          = regexp.MustCompile(`(?i)r2\.cloudflarestorage\.com`)
+	r2Re          = regexp.MustCompile(`(?i)(^|["'/ =])([a-z0-9-]+\.)*r2\.cloudflarestorage\.com([/:"']|$)`)
 	regionRe      = regexp.MustCompile(`^[[:space:]]*region[[:space:]]*=`)
 	lockfileRe    = regexp.MustCompile(`^[[:space:]]*use_lockfile[[:space:]]*=[[:space:]]*true`)
 	dynamoRe      = regexp.MustCompile(`^[[:space:]]*dynamodb_table[[:space:]]*=`)
