@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Append one JSON line to audit/YYYY-MM.jsonl on the data branch (an orphan branch, created on first use).
 # Best-effort by design: a failure to write the log must never fail a deploy, so this always exits 0.
-# Also sourced by finish/store.sh (functions record_prepare and record_write). Test overrides: TFPLS_REMOTE_URL (instead of github.com), TFPLS_NOW (ISO timestamp).
+# KEPT ONLY for finish/store.sh (sourced) until finish is ported; the action itself runs `tfpls record` (internal/record). Also sourced by finish/store.sh (functions record_prepare and record_write). Test overrides: TFPLS_REMOTE_URL (instead of github.com), TFPLS_NOW (ISO timestamp).
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=datastore.sh
 . "$here/datastore.sh"

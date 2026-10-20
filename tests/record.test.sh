@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Tests for actions/record/record.sh against a local bare repository standing in for GitHub.
+# Tests for `tfpls record` (actions/record) against a local bare repository standing in for GitHub.
 set -uo pipefail
 export TFPLS_RETRY_SLEEP=0   # retries pause randomly in the scripts under test; the tests do not wait
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-R="$here/actions/record/record.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 git init -q --bare "$T/remote.git"
 export TFPLS_REMOTE_URL="$T/remote.git"
 B=(WORKSPACE=dev KIND=apply STATUS=applied REPO=o/r ACTOR=alice TRIGGER=push SHA=abc RUN_URL=http://run/1 BRANCH=tfpls-data TFPLS_NOW=2026-10-10T10:00:00Z)
 show() { git --git-dir="$T/remote.git" show "tfpls-data:$1" 2>/dev/null; }
 
-env_run() { env "${B[@]}" "$@" bash "$R" >"$T/out" 2>&1; echo $?; }
+env_run() { env "${B[@]}" "$@" "$T/tfpls" record >"$T/out" 2>&1; echo $?; }
 
 rc=$(env_run COUNTS='{"add":1,"change":2,"destroy":0,"replace":0}' REVIEWED=true PR=7 SUMMARY=$'line one\nline two')
 eq "first event exits 0" "$rc" 0
@@ -35,6 +35,7 @@ eq "6 parallel writers all land" "$(show audit/2026-12.jsonl | jq -r .workspace 
 # never fails the job
 rc=$(env_run TFPLS_REMOTE_URL="$T/missing.git")
 eq "unreachable remote: exit 0 with a warning" "$rc|$(grep -c '::warning::audit log' "$T/out")" "0|1"
+rc=$(env_run BRANCH=-x); eq "rejects a branch name git could read as an option" "$rc|$(grep -c 'invalid branch' "$T/out")" "0|1"
 rc=$(env_run BRANCH=main); eq "refuses to write to main" "$rc|$(grep -c 'refusing' "$T/out")" "0|1"
 rc=$(env_run BRANCH='a b'); eq "rejects odd branch names" "$rc|$(grep -c 'invalid branch' "$T/out")" "0|1"
 rc=$(env_run COUNTS='not json'); eq "bad counts become null" "$rc|$(show audit/2026-10.jsonl | tail -1 | jq -c .counts)" "0|null"
@@ -43,5 +44,9 @@ rc=$(env_run COUNTS='not json'); eq "bad counts become null" "$rc|$(show audit/2
 rc=$(env_run DURATION=41 TFPLS_NOW=2026-12-04T00:00:00Z); eq "duration is stored in seconds" "$(show audit/2026-12.jsonl | tail -1 | jq -c '.duration_s')" "41"
 
 rc=$(env_run LOCK_ID=11111111-aaaa VIA=lock-sweep TFPLS_NOW=2026-12-05T00:00:00Z); eq "lock id and trigger are stored" "$(show audit/2026-12.jsonl | tail -1 | jq -c '[.lock_id,.via]')" '["11111111-aaaa","lock-sweep"]'
+
+# a multi-byte summary is cut at 300 characters, not bytes
+rc=$(env_run SUMMARY="$(printf 'é%.0s' $(seq 1 400))" TFPLS_NOW=2026-12-06T00:00:00Z); eq "the summary is cut by characters" "$(show audit/2026-12.jsonl | tail -1 | jq -r '.summary | length')" 300
+eq "action.yml installs the binary, then runs tfpls record" "$(yq -r '.runs.steps[0].uses' "$here/actions/record/action.yml")|$(yq -r '.runs.steps[1].run' "$here/actions/record/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls record"
 
 done_tests
