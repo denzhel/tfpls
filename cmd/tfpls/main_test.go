@@ -11,7 +11,7 @@ func TestRun(t *testing.T) {
 		{[]string{"version"}, 0},
 		{[]string{"--help"}, 0},
 		{[]string{"nope"}, 2},
-		{[]string{"onboard"}, 1},
+		{[]string{"onboard", "--nope"}, 2},
 	}
 	for _, c := range cases {
 		if got := run(c.args); got != c.want {

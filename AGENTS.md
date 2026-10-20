@@ -12,6 +12,9 @@ Work is tracked on the maintainer's project board (coordinates in `.github/proje
 - The issue body is the live checklist: tick a task, acceptance criterion or test criterion (`- [x]`) only when it is proven, with the evidence in a comment or the PR Verification section; strike items that no longer apply with a reason (`- [x] ~~text~~ n/a: reason`). An issue is closed only with zero unticked boxes.
 - PRs say `Closes #n` and carry a Verification section with the exact commands and outcome; the global rules in `~/.claude/CLAUDE.md` apply as well.
 
+## Code rule
+New logic is written in Go (`cmd/tfpls`, `internal/<name>/`); Bash only for thin glue; a Bash module over about 400 lines is ported (`gofmt`, `go vet`, `go test` clean).
+
 ## Process
 - Plan every task first and get the plan approved before changing anything.
 - Verify workflow changes in a test repository (GitHub-hosted runners, real AWS in one region, state in S3, access through the OIDC role in the variable `TFPLS_ROLE_ARN`; the "sandbox check" of the issue templates means that repository) before closing an issue. The shared workflows are referenced by `@main`, so push to `main` before testing from there. Costs: destroy what a test created and keep NAT gateways off when idle.

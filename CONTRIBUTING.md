@@ -11,7 +11,8 @@
 
 ## Style
 
-- Bash for logic (`set -uo pipefail`, quote everything, no zsh-isms), `jq` for JSON, composite actions for reusable steps; keep workflow YAML thin.
+- New logic is written in Go (`cmd/tfpls`, one package per module in `internal/<name>/`, standard library first, Go 1.24): `gofmt -l .` prints nothing, `go vet ./...` and `go test ./...` pass. Black-box behaviour stays pinned by `tests/*.test.sh`, which drive the built binary; Go unit tests sit beside the code.
+- Bash is for thin glue (`set -uo pipefail`, quote everything, no zsh-isms), `jq` for JSON, composite actions for reusable steps; keep workflow YAML thin. A Bash module of more than about 400 lines is ported to Go.
 - Do not use third-party actions without pinning them to a commit SHA; do not add dependencies the runners would have to install without a checksum-verified download.
 - Container images (if any) are Alpine or other minimal images.
 
