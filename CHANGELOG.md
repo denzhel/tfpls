@@ -7,6 +7,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 ## Unreleased
 
 - **Changed:** onboarding is now Go (`tfpls onboard`, `internal/onboard`; same questions, words, files and exit codes, proven by the 110 black-box checks and a side-by-side run of the old script and the binary). `tools/onboard` keeps its URL and the `curl ... | bash` one-liner but becomes a 54-line bootstrap that downloads the release binary, refuses a checksum mismatch, caches it and runs it; `TFPLS_ONBOARD_BIN` runs a local binary offline. It needs a release that carries the binaries (see docs/getting-started.md).
+- Maintainers: a pushed release tag (`v*`, pre-releases too) now publishes the `tfpls` binary: `tfpls_<os>_<arch>.tar.gz` for linux and darwin on amd64 and arm64 plus `SHA256SUMS`, with a build provenance attestation (`.github/workflows/release.yml`, `tools/build-release.sh`; verification in `docs/releasing.md`). CI has a `go` job (gofmt, vet, test, cross-build) and Dependabot watches the Go module.
+
 - Maintainers: the Go module `github.com/denzhel/tfpls` and the `tfpls` binary skeleton (`tfpls version`) are in; the port of the tools to Go starts with onboarding, the Bash stays until each module has parity.
 - Maintainers: the onboarding pty test in `tests/onboard.test.sh` no longer fails by chance (it killed a finished child when the terminal reported its end a moment before the child could be reaped, about 1 run in 150 on a busy machine); the helper now waits for the exit, and three checks pin the helper itself.
 
