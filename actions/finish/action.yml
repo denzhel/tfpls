@@ -63,7 +63,7 @@ runs:
         HOOKS: ${{ inputs.webhooks }}
       run: ${{ github.action_path }}/webhook.sh
     - if: always() && inputs.notify == 'true'
-      uses: denzhel/tfpls/actions/notify-slack@main
+      uses: denzhel/tfpls/actions/notify-slack@v0.4.0
       with:
         webhook: ${{ steps.hook.outputs.url }}
         format: ${{ fromJSON(inputs.entry).notify_format }}
@@ -103,7 +103,7 @@ runs:
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       run: ${{ github.action_path }}/store.sh
     - if: always() && inputs.queue == 'true'
-      uses: denzhel/tfpls/actions/queue@main
+      uses: denzhel/tfpls/actions/queue@v0.4.0
       with:
         mode: leave
         name: ${{ fromJSON(inputs.entry).name }}
