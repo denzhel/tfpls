@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: the Go module `github.com/denzhel/tfpls` and the `tfpls` binary skeleton (`tfpls version`) are in; the port of the tools to Go starts with onboarding, the Bash stays until each module has parity.
 - Maintainers: the onboarding pty test in `tests/onboard.test.sh` no longer fails by chance (it killed a finished child when the terminal reported its end a moment before the child could be reaped, about 1 run in 150 on a busy machine); the helper now waits for the exit, and three checks pin the helper itself.
 
 ## v0.4.0

@@ -5,3 +5,6 @@ plan.json
 plan.txt
 .DS_Store
 .local/
+
+/tfpls
+/dist/
