@@ -2,7 +2,7 @@ name: result of the plan jobs
 description: One stable check for branch protection. Add it as a job in YOUR caller workflow (opt-in), so the run page only gets an extra row if you want it.
 inputs:
   needs:
-    description: 'Pass ${{ toJSON(needs) }} from the job that lists the plan job in needs'
+    description: 'The needs context of the job that lists the plan job in needs, as JSON (toJSON of needs)'
     required: true
 runs:
   using: composite
