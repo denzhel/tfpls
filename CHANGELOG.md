@@ -6,8 +6,10 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+## v0.6.0
+
 - **Fixed:** `actions/result` could not be used at all: GitHub reads `${{ toJSON(needs) }}` in an input description as an expression and refused to load the action ("Unrecognized named-value: needs"). The description is reworded, and `tests/action-descriptions.test.sh` fails on an expression in any action's input description. If you worked around this, remove the workaround.
-- **Changed:** `actions/result` runs `tfpls result` (Go) instead of a shell script with `jq`; same outcome for every `needs` input, and invalid input now fails (it is red, never silently green). The new `actions/bin` installs the `tfpls` binary in a job: the verified release binary on a release tag (SHA-256 and build provenance), built from the ref's own source on `main` and branches; `tools/release.sh` stamps the version in `actions/bin/VERSION`. Callers change nothing.
+- **Changed:** `actions/result` runs `tfpls result` (Go) instead of a shell script with `jq`; same outcome for every `needs` input, and invalid input now fails (it is red, never silently green). The new `actions/bin` installs the `tfpls` binary in a job: the verified release binary on a release tag (SHA-256 and build provenance), built from the ref's own source on `main` and branches; `tools/release.sh` stamps the version in `actions/bin/VERSION`. Callers change nothing. Measured on a hosted runner: about 4 seconds for the release binary with its provenance check (cached afterwards), about 14 seconds to build from source on `@main`. A job pinned to a tag started within about a minute of the tag push can fail to download until the release workflow has published the assets; re-run it.
 - Maintainers: the release workflow runs only for exact version tags (`vX.Y.Z`, `vX.Y.Z-rc.N`); moving the major tag `v0` no longer starts a release run that fails.
 
 ## v0.5.0
