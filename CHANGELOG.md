@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- **Changed:** `actions/result` runs `tfpls result` (Go) instead of a shell script with `jq`; same outcome for every `needs` input, and invalid input now fails (it is red, never silently green). The new `actions/bin` installs the `tfpls` binary in a job: the verified release binary on a release tag (SHA-256 and build provenance), built from the ref's own source on `main` and branches; `tools/release.sh` stamps the version in `actions/bin/VERSION`. Callers change nothing.
 - Maintainers: the release workflow runs only for exact version tags (`vX.Y.Z`, `vX.Y.Z-rc.N`); moving the major tag `v0` no longer starts a release run that fails.
 
 ## v0.5.0

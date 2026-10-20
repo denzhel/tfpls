@@ -37,6 +37,20 @@ jobs:
             yq '.' "$f" > /dev/null || { echo "::error file=$f::not valid YAML"; exit 1; }
           done
 
+  bin-action:
+    # the action that puts tfpls on the PATH of a job: on a branch it builds the binary from this checkout
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./actions/bin
+      - name: the binary is on the PATH and runs
+        env:
+          NEEDS: '{"detect":{"result":"success"},"plan":{"result":"skipped"}}'
+        run: |
+          [ "$(tfpls version)" = dev ]
+          tfpls result
+
   go:
     runs-on: ubuntu-latest
     timeout-minutes: 10
