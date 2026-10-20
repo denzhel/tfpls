@@ -150,3 +150,7 @@ tfpls_hint() {
       echo "Run \`$plan_cmd\` (or push a commit so the PR plan runs) and review it, then apply.";;
   esac
 }
+
+# SPIKE hook: TFPLS_PLAN_STORE_BIN=<tfpls binary> swaps the functions above for the Go version (see plan-store-go.sh)
+# shellcheck source=plan-store-go.sh
+if [ -n "${TFPLS_PLAN_STORE_BIN:-}" ]; then . "$(dirname "${BASH_SOURCE[0]}")/plan-store-go.sh"; fi

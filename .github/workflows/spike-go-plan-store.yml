@@ -1,0 +1,106 @@
+name: spike-go-plan-store
+# THROWAWAY SPIKE (draft PR "SPIKE (do not merge): plan store in Go"). Never on main: it runs only on the spike branch or by hand.
+# It (1) runs the shared plan-store checks against the Go store on Linux and (2) measures what the binary costs inside a job:
+# downloading and verifying the v0.5.0-rc.1 release binary against go build with actions/setup-go and with the runner's own Go.
+on:
+  workflow_dispatch:
+  push:
+    branches: [spike/go-plan-store]
+
+permissions:
+  contents: read
+
+jobs:
+  spike-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go test ./internal/planstore/
+      - run: CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/tfpls" ./cmd/tfpls
+      - name: the shared checks against Bash
+        run: |
+          bash tests/plan-store.test.sh | tail -1
+          bash tests/run-after-apply.test.sh | tail -1
+      - name: the shared checks against Go
+        env:
+          TFPLS_PLAN_STORE_BIN: ${{ runner.temp }}/tfpls
+        run: |
+          bash tests/plan-store.test.sh | tail -1
+          bash tests/run-after-apply.test.sh | tail -1
+      - name: format compatibility, both ways, against openssl on Linux
+        env:
+          TFPLS_PLAN_STORE_BIN: ${{ runner.temp }}/tfpls
+        run: |
+          openssl version
+          bash tests/plan-store-compat.test.sh
+
+  spike-cost-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: download and verify the release binary (cold, then again)
+        run: |
+          base=https://github.com/denzhel/tfpls/releases/download/v0.5.0-rc.1
+          for round in 1 2; do
+            d=$(mktemp -d); t0=$(date +%s.%N)
+            curl -fsSL -o "$d/tfpls_linux_amd64.tar.gz" "$base/tfpls_linux_amd64.tar.gz"
+            curl -fsSL -o "$d/SHA256SUMS" "$base/SHA256SUMS"
+            t1=$(date +%s.%N)
+            (cd "$d" && grep ' \*\?tfpls_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c - && tar -xzf tfpls_linux_amd64.tar.gz)
+            t2=$(date +%s.%N)
+            "$(find "$d" -name tfpls -type f | head -1)" version
+            echo "SPIKE-TIMING download round $round: fetch $(echo "$t1 - $t0" | bc)s, verify+extract $(echo "$t2 - $t1" | bc)s, total $(echo "$t2 - $t0" | bc)s" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+  spike-cost-setup-go-cold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: go build (cold)
+        run: |
+          t0=$(date +%s.%N); CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/tfpls" ./cmd/tfpls; t1=$(date +%s.%N)
+          "$RUNNER_TEMP/tfpls" version; go version
+          echo "SPIKE-TIMING setup-go (no cache) go build: $(echo "$t1 - $t0" | bc)s" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  spike-cost-setup-go-cached:
+    # the first run of this job fills the cache (setup-go saves it in its post step), later runs restore it
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.mod
+      - name: go build (setup-go cache restored on a re-run)
+        run: |
+          t0=$(date +%s.%N); CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/tfpls" ./cmd/tfpls; t1=$(date +%s.%N)
+          "$RUNNER_TEMP/tfpls" version
+          echo "SPIKE-TIMING setup-go (cache) go build: $(echo "$t1 - $t0" | bc)s" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  spike-cost-preinstalled-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: go build with the runner's own Go (cold build cache, then warm)
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          go version; grep '^go ' go.mod
+          for round in cold warm; do
+            rm -f "$RUNNER_TEMP/tfpls"; t0=$(date +%s.%N)
+            CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/tfpls" ./cmd/tfpls; t1=$(date +%s.%N)
+            echo "SPIKE-TIMING preinstalled go, $round build cache: $(echo "$t1 - $t0" | bc)s" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+          "$RUNNER_TEMP/tfpls" version
