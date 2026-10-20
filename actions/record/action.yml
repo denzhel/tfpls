@@ -37,6 +37,7 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - shell: bash
       env:
         WORKSPACE: ${{ inputs.workspace }}
@@ -56,4 +57,4 @@ runs:
         TRIGGER: ${{ github.event_name }}
         SHA: ${{ github.sha }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: ${{ github.action_path }}/record.sh
+      run: tfpls record
