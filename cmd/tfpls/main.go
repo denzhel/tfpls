@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/denzhel/tfpls/internal/onboard"
+	"github.com/denzhel/tfpls/internal/result"
 )
 
 // version is set at build time: -ldflags "-X main.version=v0.5.0".
@@ -16,6 +17,7 @@ const usage = `tfpls: OpenTofu on GitHub Actions
 Usage:
   tfpls version
   tfpls onboard [flags]
+  tfpls result            (reads the needs JSON from $NEEDS)
 
 `
 
@@ -38,6 +40,8 @@ func run(args []string) int {
 			Getenv: os.Getenv, Stdout: os.Stdout, Stderr: os.Stderr,
 			StdoutIsTerminal: onboard.IsTerminal(os.Stdout), Cwd: cwd,
 		})
+	case "result":
+		return result.Run(os.Getenv("NEEDS"), os.Stdout)
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 		return 0

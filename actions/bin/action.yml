@@ -1,0 +1,9 @@
+name: tfpls binary
+description: Put the tfpls binary on the PATH of the job (release binary, SHA-256 and provenance verified, cached; built from the action's own source on main and branches)
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: ${{ github.action_path }}/install.sh

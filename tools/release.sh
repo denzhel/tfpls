@@ -45,8 +45,12 @@ left=$(grep -rnE "${slug}/(actions/[a-z-]+|\.github/workflows/[a-z-]+\.yml)@main
 [ -z "$left" ] || { echo "internal @main references remain:" >&2; echo "$left" >&2; exit 1; }
 for f in $files; do yq '.' "$f" >/dev/null || { echo "invalid YAML after rewrite: $f" >&2; exit 1; }; done
 
+# the binary the actions install: the job downloads exactly this release (on main the file says `dev`: built from source)
+printf '%s\n' "$ver" > actions/bin/VERSION
+
 n=$(grep -rhoE "${slug}/(actions/[a-z-]+|\.github/workflows/[a-z-]+\.yml)@${ver}" .github/workflows actions | wc -l | tr -d ' ')
 echo "release $ver: $n internal references now point at @${ver} in $(wc -w <<<"$files" | tr -d ' ') files"
+echo "actions/bin/VERSION: $(cat actions/bin/VERSION)"
 [ "$pre" = true ] && echo "pre-release: $major stays where it is"
 if [ "$dry" = true ]; then git diff --stat | tail -1; echo "dry run: nothing committed, tagged or pushed"; exit 0; fi
 
