@@ -6,9 +6,13 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: `actions/wait-for` is now `tfpls wait-for` (Go, `internal/waitfor`); same inputs and messages, and an unparsable job list is a read failure that is retried instead of being taken as "no jobs".
+
+- Maintainers: `tests/bin-install.test.sh` no longer fails about 1 run in 16 (its corrupted checksum replaced the first character by `0`, which changed nothing when the hash already began with `0`).
 - Maintainers: the Go port reads YAML with `go.yaml.in/yaml/v3` through `internal/yamlconf` (what `yq -o=json` gave the scripts; checked against `yq` on every workflow, action and example file of the repository); it is the only dependency besides the standard library.
 - Maintainers: shared Go helpers for the port: `internal/ghactions` (step outputs with a delimiter that cannot be forged, environment, PATH, summary, escaped annotations, masks) and `internal/gh` (the `gh` CLI as a process); each subcommand registers itself in `cmd/tfpls/cmd_<name>.go`.
 - Maintainers: `actions/codeowners` runs the Go `tfpls codeowners enforce` (`internal/codeowners`; `check.sh` and `enforce.sh` are gone; `tfpls codeowners check` is the checker). Same inputs and messages. Fixes: the base ref is URL-escaped in the CODEOWNERS lookup, a non-numeric `comment_id` never reaches the API, a team slug with odd characters is never sent to the API, an entry without `owner_paths` no longer becomes the path `null`, and an empty list of paths is refused with a clear message instead of a usage error.
+- Maintainers: `pr-notes` and `mark-outdated` run as `tfpls pr-notes` and `tfpls mark-outdated` (Go, `internal/prcomments`); an unreadable `names` list now marks nothing instead of marking every plan outdated.
 
 ## v0.6.0
 

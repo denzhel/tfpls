@@ -15,6 +15,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: n
       shell: bash
       env:
@@ -24,4 +25,4 @@ runs:
         REPO: ${{ github.repository }}
         PR: ${{ inputs.pr_number }}
         CONFIG: ${{ inputs.config }}
-      run: ${{ github.action_path }}/notes.sh ${{ inputs.mode }}
+      run: tfpls pr-notes ${{ inputs.mode }}
