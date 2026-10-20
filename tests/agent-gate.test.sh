@@ -5,7 +5,7 @@
 # Run: bash tests/agent-gate.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-G="$here/tools/agent-gate.sh"
+G="${TFPLS_GATE:-$here/tools/agent-gate.sh}"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/fx"

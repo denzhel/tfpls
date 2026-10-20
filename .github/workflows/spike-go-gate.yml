@@ -1,0 +1,38 @@
+# SPIKE (do not merge): builds the Go port of tools/agent-gate.sh and runs the shared gate test file against it on Linux,
+# then prints the build time, the stripped binary size and the start-up time. Throwaway; the Bash gate stays the production code.
+name: spike-go-gate
+on:
+  pull_request:
+    paths: [tools/agent-gate-go/**, tools/agent-gate.sh, tests/agent-gate.test.sh, .github/workflows/spike-go-gate.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  go-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tools/agent-gate-go
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: toolchain
+        run: go version; awk --version 2>&1 | head -1 || awk -W version 2>&1 | head -1
+      - name: build (cold cache) and size
+        run: |
+          go clean -cache
+          s=$(date +%s%N); CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o bin/agent-gate .; e=$(date +%s%N)
+          echo "build: $(( (e - s) / 1000000 )) ms (cold cache, linux/amd64, stripped)"
+          echo "size: $(stat -c %s bin/agent-gate) bytes (stripped)"
+      - name: unit tests
+        run: go vet ./... && go test ./...
+      - name: shared checks against the Go binary
+        run: TFPLS_GATE="$PWD/agent-gate" bash ../../tests/agent-gate.test.sh
+      - name: shared checks against the Bash gate (unchanged behaviour)
+        run: bash ../../tests/agent-gate.test.sh
+      - name: start-up time (200 runs each, usage exit, no gh call)
+        run: |
+          t() { local s e _; s=$(date +%s%N); for _ in $(seq 200); do "$@" bogus >/dev/null 2>&1; done; e=$(date +%s%N); echo "$(( (e - s) / 200000 )) us avg: $*"; }
+          t ./bin/agent-gate
+          t bash ../agent-gate.sh

@@ -1,0 +1,3 @@
+#!/bin/sh
+# SPIKE: the shared test runs the gate as `bash "$G"`, so TFPLS_GATE points here and this execs the Go binary next to it.
+exec "$(dirname "$0")/bin/agent-gate" "$@"
