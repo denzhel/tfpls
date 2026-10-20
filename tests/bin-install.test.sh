@@ -42,7 +42,7 @@ run ok TFPLS_TOOL_CACHE="$T/c1" TFPLS_RELEASE_BASE="file://$T/nowhere"
 [ $rc -eq 0 ] && ok "the second run uses the cache (no download)" || bad "cache not used: $out"
 
 # a corrupted checksum is refused and nothing is cached
-cp "$rel/SHA256SUMS" "$T/sums.good"; sed '1s/^./0/' "$T/sums.good" > "$rel/SHA256SUMS"
+cp "$rel/SHA256SUMS" "$T/sums.good"; sed '1s/^./g/' "$T/sums.good" > "$rel/SHA256SUMS"
 run ok TFPLS_TOOL_CACHE="$T/c2"
 [ $rc -ne 0 ] && grep -q "checksum mismatch" <<<"$out" && [ ! -e "$T/c2/bin" ] && ok "a checksum mismatch is refused and nothing is cached" || bad "mismatch accepted: $out"
 printf '%s  other.tar.gz\n' "$(sha "$rel/tfpls_${os}_${arch}.tar.gz")" > "$rel/SHA256SUMS"
