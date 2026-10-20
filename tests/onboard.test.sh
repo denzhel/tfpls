@@ -171,35 +171,64 @@ mkdir -p "$t/q/workspaces/dev"; out=$(ans 'n\n' "$t/q")
 out=$(ans 'n\n' --yes "$t/q"); [ -f "$t/q/.github/workflows/tofu.yml" ] && ! grep -qE '\[Y/n\]|\[y/N\]' <<<"$out" && ok "--yes asks nothing and takes the defaults" || bad "--yes: $out"
 if command -v python3 >/dev/null; then
   pty() { # pty <answers separated by |> <args...>: `cat onboard | bash -s -- args` in a pseudo-terminal, as curl | bash on a laptop
-    ANSWERS=$1 python3 - "$init" "${@:2}" <<'PY'
+    # (PTY_CMD runs that command instead; PTY_DEADLINE and PTY_GRACE are seconds: how long to let it run, how long to wait for it to exit)
+    ANSWERS=$1 PTY_CMD="${PTY_CMD:-}" python3 - "$init" "${@:2}" <<'PY'
 import os, pty, select, signal, sys, time
 script, args = sys.argv[1], sys.argv[2:]
 answers = os.environ["ANSWERS"].split("|") if os.environ["ANSWERS"] else []
+cmd = os.environ.get("PTY_CMD", "")
+deadline = float(os.environ.get("PTY_DEADLINE") or 60)
+grace = float(os.environ.get("PTY_GRACE") or 10)
 pid, fd = pty.fork()
 if pid == 0:
     os.environ["NO_COLOR"] = "1"
+    if cmd:
+        os.execvp("bash", ["bash", "-c", cmd])
     os.execvp("bash", ["bash", "-c", 'cat "$0" | bash -s -- "$@"', script] + args)
-out, sent, end = b"", 0, time.time() + 30
-while time.time() < end:
-    if fd in select.select([fd], [], [], 0.1)[0]:
+out, sent = b"", 0
+def pump(wait):  # read what the terminal has, answer each question once; False on EOF/EIO (the child closed the terminal)
+    global out, sent
+    if fd in select.select([fd], [], [], wait)[0]:
         try:
             chunk = os.read(fd, 4096)
         except OSError:
-            break
+            return False
         if not chunk:
-            break
+            return False
         out += chunk
         while sent < min(len(answers), out.count(b"[Y/n]") + out.count(b"[y/N]")):
             os.write(fd, answers[sent].encode() + b"\n"); sent += 1
-if os.waitpid(pid, os.WNOHANG) == (0, 0):
-    os.kill(pid, signal.SIGKILL); out += b"\nKILLED (waiting for an answer)"
-    os.waitpid(pid, 0)
+    return True
+end = time.time() + deadline
+while time.time() < end and pump(0.1):
+    pass
+# The terminal reports EOF as soon as the child closes it, a few milliseconds BEFORE the child can be reaped: wait for the
+# exit before calling it stuck (killing a child that was only finishing made this test fail now and then on a busy runner).
+status, stop = None, time.time() + grace
+while status is None and time.time() < stop:
+    done, st = os.waitpid(pid, os.WNOHANG)
+    if done:
+        status = st
+    else:
+        pump(0.05)
+if status is None:
+    os.kill(pid, signal.SIGKILL); os.waitpid(pid, 0); out += b"\nKILLED (waiting for an answer)"
+else:
+    while pump(0.2):  # what is left in the terminal after the exit
+        pass
+    if os.waitstatus_to_exitcode(status) != 0:
+        out += ("\nEXIT %d" % os.waitstatus_to_exitcode(status)).encode()
 sys.stdout.write(out.decode("utf-8", "replace"))
 PY
   }
   mkdir -p "$t/p/workspaces/dev"; out=$(pty 'n' --no-jokes "$t/p")
   grep -q 'Write the new file(s)? \[Y/n\]' <<<"$out" && [ ! -e "$t/p/.github/workflows/tofu.yml" ] && ! grep -q KILLED <<<"$out" && ok "under curl | bash in a terminal the question is read from /dev/tty (answered no: nothing written)" || bad "pty: $out"
   out=$(pty '' --yes --no-jokes "$t/p"); [ -f "$t/p/.github/workflows/tofu.yml" ] && ! grep -q '\[Y/n\]' <<<"$out" && ok "--yes in a terminal: no question, files written" || bad "pty --yes: $out"
+  # the helper itself: a child that closes its terminal and is still exiting is waited for, not killed (the race behind the old flake) ...
+  out=$(PTY_CMD='exec >&- 2>&- </dev/null; sleep 0.4; exit 0' pty '' x); ! grep -qE 'KILLED|EXIT' <<<"$out" && ok "pty helper: a child that closed its terminal and is still exiting is waited for" || bad "pty helper killed a finishing child: $out"
+  # ... a child that really hangs is still killed and marked, and a failing child reports its exit status
+  out=$(PTY_CMD='sleep 30' PTY_DEADLINE=1 PTY_GRACE=1 pty '' x); grep -q KILLED <<<"$out" && ok "pty helper: a child that really hangs is killed and marked" || bad "pty helper did not mark a hanging child: $out"
+  out=$(PTY_CMD='echo hi; exit 3' pty '' x); grep -q 'EXIT 3' <<<"$out" && ok "pty helper: a failing child reports its exit status" || bad "pty helper hid an exit status: $out"
 fi
 
 # ---- an existing tfpls caller under another name is updated, never doubled; another pipeline is asked about, never deleted
