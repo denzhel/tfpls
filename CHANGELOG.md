@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: shared Go helpers for the port: `internal/ghactions` (step outputs with a delimiter that cannot be forged, environment, PATH, summary, escaped annotations, masks) and `internal/gh` (the `gh` CLI as a process); each subcommand registers itself in `cmd/tfpls/cmd_<name>.go`.
 ## v0.6.0
 
 - **Fixed:** `actions/result` could not be used at all: GitHub reads `${{ toJSON(needs) }}` in an input description as an expression and refused to load the action ("Unrecognized named-value: needs"). The description is reworded, and `tests/action-descriptions.test.sh` fails on an expression in any action's input description. If you worked around this, remove the workaround.
