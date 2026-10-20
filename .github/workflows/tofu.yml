@@ -24,6 +24,12 @@ on:
       max_parallel: { type: number, default: 4, description: "workspaces applied, drift-checked or fixed at the same time (pull request plans always run up to 20)" }
       timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
       allow_unencrypted_plans: { type: boolean, default: false, description: "true = a plan saved without PLAN_ENCRYPTION_KEY on a private repository is stored unencrypted without the warning (default: warn); public repositories never save one" }
+    # the only secrets the workflows use, each by name and all optional: `secrets: inherit` passes them on, or list just these
+    secrets:
+      TFPLS_ENV_JSON: { required: false, description: "JSON map of env vars for the providers and the backend (docs/credentials.md)" }
+      PLAN_ENCRYPTION_KEY: { required: false, description: "encrypts saved plans (docs/reviewed-plans.md)" }
+      SLACK_WEBHOOK: { required: false, description: "the default notification webhook (docs/notifications.md)" }
+      TFPLS_NOTIFY_WEBHOOKS: { required: false, description: 'JSON object {"KEY": "https://..."} of further webhooks; notify_secret names a key (docs/notifications.md)' }
 
 jobs:
   plan:

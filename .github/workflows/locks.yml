@@ -15,7 +15,6 @@ on:
       apply_environment: { type: string, default: "", description: "GitHub Environment that holds the apply credentials" }
     secrets:
       TFPLS_ENV_JSON: { required: false, description: "apply credentials: releasing a lock deletes or updates the lock in the state backend" }
-      SLACK_WEBHOOK: { required: false }
 
 jobs:
   # one job looks at every workspace in turn (a runner per workspace would bill a minute each for a few seconds of work)

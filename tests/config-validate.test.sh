@@ -34,7 +34,7 @@ check "drift_remediate rejects other values"    $'defaults: { drift_remediate: s
 
 
 check "notification settings are accepted"    $'defaults: { notify_secret: SLACK_WEBHOOK_X, notify_format: teams, notify_mention: "@here" }\nstacks:\n  - name: s\n    workspaces: [a]' none
-check "notify_secret must be a secret NAME"     $'defaults: { notify_secret: "https://hooks.slack.com/x" }\nstacks:\n  - name: s\n    workspaces: [a]' error "NAME of a secret"
+check "notify_secret must be a key, not a URL"  $'defaults: { notify_secret: "https://hooks.slack.com/x" }\nstacks:\n  - name: s\n    workspaces: [a]' error "a key of the secret TFPLS_NOTIFY_WEBHOOKS"
 check "notify_format is validated"              $'defaults: { notify_format: pager }\nstacks:\n  - name: s\n    workspaces: [a]' error "slack, teams or generic"
 check "drift_fix: false is accepted"                $'defaults: { drift_fix: false }\nstacks:\n  - name: s\n    workspaces: [a]' none
 check "drift_fix must be true or false"             $'defaults: { drift_fix: "no" }\nstacks:\n  - name: s\n    workspaces: [a]' error "true or false"

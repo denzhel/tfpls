@@ -27,7 +27,7 @@ stacks:
 
 Selection rules: any changed file under `dir` (minus `ignore`) selects **every** workspace, except files under a `workspace_paths` prefix, which select only their own workspace. If `workspace_paths` is unset, any change selects all workspaces (the safe default).
 
-Runners: pass `runs_on` (`with: { runs_on: self-hosted }` in the caller), either a label or a JSON array of labels (`'["self-hosted","dedicated-terraform"]'`). Credentials and the optional secrets (`PLAN_ENCRYPTION_KEY`, `SLACK_WEBHOOK`): [credentials.md](credentials.md).
+Runners: pass `runs_on` (`with: { runs_on: self-hosted }` in the caller), either a label or a JSON array of labels (`'["self-hosted","dedicated-terraform"]'`). Credentials and the optional secrets (`PLAN_ENCRYPTION_KEY`, `SLACK_WEBHOOK`, `TFPLS_NOTIFY_WEBHOOKS`): [credentials.md](credentials.md), [notifications.md](notifications.md). The workflows use four secrets, each by name: `TFPLS_ENV_JSON`, `PLAN_ENCRYPTION_KEY`, `SLACK_WEBHOOK` and `TFPLS_NOTIFY_WEBHOOKS`. `secrets: inherit` passes them on; or list just those in the caller (`secrets: { TFPLS_ENV_JSON: ${{ secrets.TFPLS_ENV_JSON }}, ... }`).
 
 Job titles, PR comment headings and Slack messages use just the workspace name (`prod-us-west-1`). If two stacks share a workspace name the label falls back to `stack/workspace`.
 
@@ -54,7 +54,7 @@ Job titles, PR comment headings and Slack messages use just the workspace name (
 | `policy_packs` | none | Packs from the shared [policy library](policies.md), e.g. `[safety, aws-s3]`; evaluated together with `policy_dir` |
 | `after` | none | List of workspace globs that must be applied successfully first (only those in the same run are waited for), see [ordering.md](ordering.md) |
 | `drift_remediate` | `never` | `never` / `additive_only` / `always`: fix drift automatically (off unless you set it) |
-| `notify_secret` / `notify_format` / `notify_mention` | `SLACK_WEBHOOK` / `slack` / none | Per-workspace webhook secret name, `slack` / `teams` / `generic`, mention on failures, see [notifications.md](notifications.md) |
+| `notify_secret` / `notify_format` / `notify_mention` | `SLACK_WEBHOOK` / `slack` / none | Per-workspace webhook: a key of the secret `TFPLS_NOTIFY_WEBHOOKS` (the default is the secret `SLACK_WEBHOOK`), `slack` / `teams` / `generic`, mention on failures, see [notifications.md](notifications.md#per-workspace-another-channel-another-system-a-mention) |
 | `notify_template` | built-in Slack message | Path of a jq file that builds the webhook body from the run JSON (empty output sends nothing), see [notifications.md](notifications.md#your-own-message-notify_template) |
 | `overrides` | none | Map of workspace glob to any of the settings above |
 

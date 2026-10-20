@@ -17,7 +17,8 @@ on:
       apply_environment: { type: string, default: "", description: "GitHub Environment used by apply-capable jobs (holds the apply credentials; can require reviewers)" }
     secrets:
       TFPLS_ENV_JSON: { required: false }
-      SLACK_WEBHOOK: { required: false }
+      SLACK_WEBHOOK: { required: false, description: "the default notification webhook" }
+      TFPLS_NOTIFY_WEBHOOKS: { required: false, description: 'JSON object {"KEY": "https://..."} of further webhooks; notify_secret names a key (docs/notifications.md)' }
       PLAN_ENCRYPTION_KEY: { required: false, description: 'decrypts saved plans; must match the key used by plan.yml' }
 
 jobs:
@@ -104,7 +105,9 @@ jobs:
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           label: ${{ matrix.label }}
-          webhook: ${{ secrets[fromJSON(needs.detect.outputs.entries)[matrix.label].notify_secret || 'SLACK_WEBHOOK'] }}
+          # by name only: a computed secrets[...] lookup hands every secret of the caller to this runner
+          webhook: ${{ secrets.SLACK_WEBHOOK }}
+          webhooks: ${{ secrets.TFPLS_NOTIFY_WEBHOOKS }}
           status: ${{ steps.t.outputs.status || 'error' }}
           summary: ${{ steps.t.outputs.summary }}
           counts: ${{ steps.t.outputs.counts }}
