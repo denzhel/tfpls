@@ -6,6 +6,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: `actions/wait-for` is now `tfpls wait-for` (Go, `internal/waitfor`); same inputs and messages, and an unparsable job list is a read failure that is retried instead of being taken as "no jobs".
+
 - Maintainers: the Go port reads YAML with `go.yaml.in/yaml/v3` through `internal/yamlconf` (what `yq -o=json` gave the scripts; checked against `yq` on every workflow, action and example file of the repository); it is the only dependency besides the standard library.
 - Maintainers: shared Go helpers for the port: `internal/ghactions` (step outputs with a delimiter that cannot be forged, environment, PATH, summary, escaped annotations, masks) and `internal/gh` (the `gh` CLI as a process); each subcommand registers itself in `cmd/tfpls/cmd_<name>.go`.
 ## v0.6.0

@@ -10,6 +10,8 @@ runs:
   using: composite
   steps:
     - if: inputs.jobs != ''
+      uses: denzhel/tfpls/actions/bin@main
+    - if: inputs.jobs != ''
       shell: bash
       env:
         WAIT_FOR: ${{ inputs.jobs }}
@@ -18,4 +20,4 @@ runs:
         REPO: ${{ github.repository }}
         RUN_ID: ${{ github.run_id }}
         ME: ${{ github.job }}
-      run: ${{ github.action_path }}/wait.sh
+      run: tfpls wait-for
