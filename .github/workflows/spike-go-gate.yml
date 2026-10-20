@@ -33,6 +33,6 @@ jobs:
         run: bash ../../tests/agent-gate.test.sh
       - name: start-up time (200 runs each, usage exit, no gh call)
         run: |
-          t() { local s e _; s=$(date +%s%N); for _ in $(seq 200); do "$@" bogus >/dev/null 2>&1; done; e=$(date +%s%N); echo "$(( (e - s) / 200000 )) us avg: $*"; }
+          t() { local s e _; s=$(date +%s%N); for _ in $(seq 200); do "$@" bogus >/dev/null 2>&1 || :; done; e=$(date +%s%N); echo "$(( (e - s) / 200000 )) us avg: $*"; }
           t ./bin/agent-gate
           t bash ../agent-gate.sh
