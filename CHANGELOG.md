@@ -6,6 +6,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: the release workflow runs only for exact version tags (`vX.Y.Z`, `vX.Y.Z-rc.N`); moving the major tag `v0` no longer starts a release run that fails.
+
 ## v0.5.0
 
 - **Changed:** onboarding is now Go (`tfpls onboard`, `internal/onboard`; same questions, words, files and exit codes, proven by the 110 black-box checks and a side-by-side run of the old script and the binary). `tools/onboard` keeps its URL and the `curl ... | bash` one-liner but becomes a 54-line bootstrap that downloads the release binary, refuses a checksum mismatch, caches it and runs it; `TFPLS_ONBOARD_BIN` runs a local binary offline. It needs a release that carries the binaries (see docs/getting-started.md).

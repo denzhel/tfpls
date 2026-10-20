@@ -4,7 +4,8 @@
 name: release
 on:
   push:
-    tags: ["v*"]
+    # exact version tags only: the moving major tag (v0) must not start a (failing) release run
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
 
 permissions:
   contents: read
