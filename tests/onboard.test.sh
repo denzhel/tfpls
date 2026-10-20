@@ -3,12 +3,17 @@
 # config), a second run changes nothing, a differing workflow is never replaced without a yes or --force, answers through
 # the test hook and through a real terminal under `curl | bash` (pty), no questions and no colours without a terminal,
 # --yes, --dry-run, the optional GitHub step (gh stub, offline otherwise), jokes, a non-writable target, bash 3.2.
-# TFPLS_ONBOARD=<path> runs the same checks against another copy of the script (for example the previous version).
+# The program is the Go binary (internal/onboard), built once per run and called through a 2-line sh wrapper.
+# TFPLS_ONBOARD=<path> runs the same checks against another program (for example the previous Bash version).
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-init="${TFPLS_ONBOARD:-$here/tools/onboard}"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 t=$(mktemp -d); trap 'chmod -R u+w "$t" 2>/dev/null; rm -rf "$t"' EXIT
+init="${TFPLS_ONBOARD:-}"
+if [ -z "$init" ]; then
+  (cd "$here" && go build -o "$t/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+  printf '#!/bin/sh\nexec "%s" onboard "$@"\n' "$t/tfpls" > "$t/onboard"; chmod +x "$t/onboard"; init="$t/onboard"
+fi
 unset NO_COLOR FORCE_COLOR TFPLS_ONBOARD_TTY
 export TFPLS_JOKE_SEED=0
 
@@ -250,7 +255,7 @@ out=$(ob "$t/rg"); grep -q 'required_version is a range (>= 1.6), not pinned' <<
 echo 1.5.7 > "$t/rg/.terraform-version"; out=$(ob "$t/rg"); grep -q 'that is a Terraform version' <<<"$out" && ok "a Terraform version is called out" || bad "terraform version: $out"
 for e in dev prod; do printf 'terraform {\n  required_version = "1.11.4"\n}\n' > "$t/ev/envs/$e/versions.tf"; done
 out=$(ob "$t/ev"); grep -q 'add a .opentofu-version file with 1.11.4' <<<"$out" && ok "a version pinned only below the root: says the pipeline reads the root" || bad "deep version: $out"
-eq "the default version is the one of actions/setup" "$(grep -oE 'TOFU_VERSION=[0-9.]+' "$here/actions/setup/action.yml" | head -1 | cut -d= -f2)" "$(sed -nE 's/^TOFU_DEFAULT=([0-9.]+).*/\1/p' "$init")"
+eq "the default version is the one of actions/setup" "$(grep -oE 'TOFU_VERSION=[0-9.]+' "$here/actions/setup/action.yml" | head -1 | cut -d= -f2)" "$(sed -nE 's/^const TofuDefault = "([0-9.]+)".*/\1/p' "$here"/internal/onboard/onboard.go)"
 
 # ---- no workspaces folder, and an empty one
 mkdir "$t/b"; out=$(ob "$t/b"); eq "no workspaces/ folder is fine" "$?" 0
@@ -304,15 +309,5 @@ grep -q '✔ PLAN_ENCRYPTION_KEY is set on GitHub' <<<"$out" && grep -q '✔ TFP
 : > "$t/gh.log"; rm -f "$t/secret.PLAN_ENCRYPTION_KEY"
 out=$(STUB_SECRETS='PLAN_ENCRYPTION_KEY\t2026-01-01\n' ans 'y\n' "$t/gh"); [ ! -e "$t/secret.PLAN_ENCRYPTION_KEY" ] && grep -q 'PLAN_ENCRYPTION_KEY is set' <<<"$out" && ok "an existing key is never replaced" || bad "existing key: $out"
 : > "$t/gh.log"; out=$(STUB_AUTH=no ans 'y\n' "$t/gh"); grep -q 'gh is not logged in' <<<"$out" && ! grep -q '^api' "$t/gh.log" && ok "gh not logged in: skipped" || bad "auth: $out"
-
-# ---- the same on macOS bash 3.2, when this machine has it
-if [ -x /bin/bash ] && [ "$(/bin/bash -c 'echo "${BASH_VERSINFO[0]}"')" = 3 ]; then
-  mkdir -p "$t/b32/workspaces/dev"; cp -R "$r" "$t/r32"; rm -f "$t/r32/.tfpls.yml" "$t/r32/.github/workflows/tofu.yml"
-  o1=$(/bin/bash "$init" "$t/b32" </dev/null 2>&1); rc1=$?; s1=$(snap "$t/b32"); o2=$(/bin/bash "$init" "$t/b32" </dev/null 2>&1)
-  [ $rc1 -eq 0 ] && [ "$(snap "$t/b32")" = "$s1" ] && grep -q 'already up to date' <<<"$o2" && ok "bash 3.2: a run and a second run that changes nothing" || bad "bash 3.2 folders: $o1 $o2"
-  o=$(printf 'n\nweb\ny\n' | TFPLS_ONBOARD_TTY=/dev/stdin /bin/bash "$init" "$t/r32" 2>&1)
-  [ "$(yq -r '.stacks[0].name' "$t/r32/.tfpls.yml")" = web ] && ! grep -qi 'unbound\|syntax error' <<<"$o" && ok "bash 3.2: the one root stack with answers" || bad "bash 3.2 root: $o"
-  o=$(/bin/bash "$init" --dry-run "$t/ev" </dev/null 2>&1); ! grep -qi 'unbound\|syntax error' <<<"$o" && grep -q 'nothing would change' <<<"$o" && ok "bash 3.2: separate roots, dry run" || bad "bash 3.2 envs: $o"
-fi
 
 done_tests

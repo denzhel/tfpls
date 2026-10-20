@@ -13,8 +13,11 @@ In the root of the repository:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/denzhel/tfpls/v0/tools/onboard | bash
-# or from a checkout: tools/onboard [--yes] [--dry-run] [dir]; with options under curl: ... | bash -s -- --dry-run
+# with options under curl: ... | bash -s -- --dry-run
+# from a checkout, without any download: go run ./cmd/tfpls onboard [--yes] [--dry-run] [dir]
 ```
+
+`tools/onboard` is a short script (read it before you pipe it into a shell): it finds your OS and architecture (Linux or macOS, amd64 or arm64), downloads the `tfpls` binary of a release with `SHA256SUMS`, **refuses to run it when the checksum does not match**, keeps it under `~/.cache/tfpls/<version>/` and runs `tfpls onboard` with your options. If `gh` is installed it also says whether `gh attestation verify` confirms the build provenance (informational, never required). The default is the latest release; `--ref vX.Y.Z` (or `TFPLS_REF=vX.Y.Z`) takes that release, and a tag that has no binary falls back to the latest. A version already in the cache needs no network. Offline or from a source build, point it at a binary: `TFPLS_ONBOARD_BIN=./tfpls tools/onboard --dry-run`. The questions are read from the terminal (`/dev/tty`), so they work under `curl | bash`.
 
 It looks around first and says what it understood: the layout, the state backend and its locking, the providers, the OpenTofu version the pipeline will use, local modules, existing workflows, CODEOWNERS and the default branch. Then it shows the files it would write and asks before it writes them (Enter takes the default; under `curl | bash` the answers are read from the terminal). It writes:
 
