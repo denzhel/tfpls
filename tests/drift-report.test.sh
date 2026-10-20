@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Tests for actions/drift-report/report.sh: transitions and the issue lifecycle, with a local bare repo and a gh stub.
+# Tests for `tfpls drift-report`: transitions and the issue lifecycle, with a local bare repo and a gh stub.
 set -uo pipefail
 export TFPLS_RETRY_SLEEP=0   # retries pause randomly in the scripts under test; the tests do not wait
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-R="$here/actions/drift-report/report.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+R="$T/tfpls drift-report"
 git init -q --bare "$T/remote.git"; mkdir -p "$T/bin"
 cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -23,7 +24,7 @@ chmod +x "$T/bin/gh"
 export TFPLS_REMOTE_URL="$T/remote.git" STUB_LOG="$T/log" STUB_BODY="$T/body" PATH="$T/bin:$PATH" REPO=o/r RUN_URL=http://run BRANCH=tfpls-data GH_TOKEN=x
 step() { # name state -> transition issue
   : > "$T/gho"
-  NAME="$1" STATE="$2" SUMMARY="+0 ~1 -0" GITHUB_OUTPUT="$T/gho" TFPLS_NOW="${3:-2026-10-10T10:00:00Z}" bash "$R" >"$T/out" 2>&1
+  NAME="$1" STATE="$2" SUMMARY="+0 ~1 -0" GITHUB_OUTPUT="$T/gho" TFPLS_NOW="${3:-2026-10-10T10:00:00Z}" $R >"$T/out" 2>&1
   tr_=$(sed -n 's/^transition=//p' "$T/gho"); is_=$(sed -n 's/^issue=//p' "$T/gho")
 }
 n() { grep -c "^$1" "$T/log"; }
@@ -65,7 +66,6 @@ PLAN_TEXT="$BIG" step terraform/pl drift 2026-10-10T12:00:00Z
 [ "$(wc -c < "$B" | tr -d ' ')" -lt 62000 ] && grep -q '^\*\*Plan:\*\* 1200 to add' "$B" && grep -q 'bytes omitted' "$B" && grep -q '^Plan: 1200 to add' "$B" && ok "a huge plan is clipped to fit an issue; the summary line is kept" || bad "huge plan: $(wc -c < "$B") bytes"
 PLAN_TEXT="" step terraform/pl drift 2026-10-10T13:00:00Z
 eq "an empty plan text leaves the table only (the run does not fail)" "$tr_|$(grep -c '<details>' "$B")|$(grep -c '^| Since |' "$B")" "none|0|1"
-grep -q 'tfpls_clip_plan\|tfpls_plan_line' "$R" && ok "report.sh reuses the plan-comment helpers of format.sh" || bad "helpers not reused"
 
 # the real outml() of run.sh: a plan line cannot end the output early or add another output
 sed -n '/^outml() /p' "$here/actions/tofu/run.sh" > "$T/outml.sh"
@@ -83,7 +83,7 @@ eq "the plan lines (even one that looks like an output) stay inside the block" "
 RUN="$here/actions/tofu/run.sh"
 grep -q 'plan_text_out' "$RUN" && grep -q 'outml plan_text' "$RUN" && grep -q 'plan_text:' "$here/actions/tofu/action.yml" && ok "the tofu action has a plan_text output" || bad "plan_text output missing"
 eq "drift.yml passes plan_text to the drift report" "$(grep -c 'plan_text: ${{ steps.t.outputs.plan_text }}' "$here/.github/workflows/drift.yml")" "1"
-grep -q 'PLAN_TEXT: ${{ inputs.plan_text }}' "$here/actions/drift-report/action.yml" && ok "the drift-report action passes plan_text to report.sh" || bad "plan_text not wired in drift-report"
+grep -q 'PLAN_TEXT: ${{ inputs.plan_text }}' "$here/actions/drift-report/action.yml" && ok "the drift-report action passes plan_text to tfpls drift-report" || bad "plan_text not wired in drift-report"
 
 # never fails the run
 TFPLS_REMOTE_URL="$T/missing.git" step terraform/x drift; eq "unreachable data branch: exit 0, transition unstored (the workflow alerts on any non-clean result)" "$tr_|$(grep -c '::warning::drift report' "$T/out")" "unstored|1"
