@@ -6,6 +6,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 POL="$here/actions/approvals/policy.jq"; RULES="$here/actions/approvals/rules.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/bin/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+export PATH="$T/bin:$PATH"   # rules.sh asks `tfpls validate-config`
 
 echo '[]' > "$T/rs-none.json"
 pol() { # head-entries-json base-yaml
@@ -69,8 +71,8 @@ overrides:
   "prod-*": { approvals: { required: 2, mode: basic } }
 Y
 git -C "$R" init -q -b main; git -C "$R" -c user.email=t@t -c user.name=t add -A; git -C "$R" -c user.email=t@t -c user.name=t commit -qm x
-yq -r '.runs.steps[0].run' "$here/actions/detect-workspaces/action.yml" > "$T/run.sh"; : > "$T/out"
-(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG=.tfpls.yml MODE=all BASE="" NAME="" JQ="$here/actions/detect-workspaces/detect.jq" VALIDATE="$here/actions/detect-workspaces/validate.jq" bash "$T/run.sh" >/dev/null 2>&1)
+: > "$T/out"
+(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG=.tfpls.yml MODE=all BASE="" NAME="" tfpls detect >/dev/null 2>&1)
 heads=$(sed -n 's/^entries=//p' "$T/out" | jq -c 'to_entries | map(.value)')
 base=$(yq -o=json '.' "$R/.tfpls.yml")
 a=$(jq -c --argjson base "$base" -f "$POL" <<<"$heads" | jq -c '[.rules[] | [.name,.policy_packs,.owner_paths]] | sort')

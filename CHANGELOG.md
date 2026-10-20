@@ -8,6 +8,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 - Maintainers: the Go port reads YAML with `go.yaml.in/yaml/v3` through `internal/yamlconf` (what `yq -o=json` gave the scripts; checked against `yq` on every workflow, action and example file of the repository); it is the only dependency besides the standard library.
 - Maintainers: shared Go helpers for the port: `internal/ghactions` (step outputs with a delimiter that cannot be forged, environment, PATH, summary, escaped annotations, masks) and `internal/gh` (the `gh` CLI as a process); each subcommand registers itself in `cmd/tfpls/cmd_<name>.go`.
+- Maintainers: `actions/detect-workspaces` runs the Go `tfpls detect` (`internal/detect`) instead of Bash and jq (`detect.jq`, `validate.jq` are gone); same inputs, outputs, messages and exit codes. `tfpls validate-config` prints the config problems of a YAML/JSON file as JSON (used by `actions/approvals`). Fixes: changed files are read NUL-separated (a path with a space or quote now matches its workspace), a workspace named `.` or `..` is refused, a base or head ref that looks like an option is refused, an invalid `lock_timeout`/`notify_secret`/name with a trailing newline no longer passes, an unreadable `workspaces_file` fails instead of selecting nothing, and `workspaces_glob` no longer splits on spaces or lists dot directories.
+
 ## v0.6.0
 
 - **Fixed:** `actions/result` could not be used at all: GitHub reads `${{ toJSON(needs) }}` in an input description as an expression and refused to load the action ("Unrecognized named-value: needs"). The description is reworded, and `tests/action-descriptions.test.sh` fails on an expression in any action's input description. If you worked around this, remove the workaround.

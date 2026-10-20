@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Tests for actions/detect-workspaces (the real script, extracted from action.yml) against a temp git repo that has the
-# layout of a "one root module, many tofu workspaces" repo. Needs git, jq, yq. Run: bash tests/detect.test.sh
+# Tests for `tfpls detect` (internal/detect, run by actions/detect-workspaces) against a temp git repo that has the
+# layout of a "one root module, many tofu workspaces" repo. Needs git, jq, yq, go. Run: bash tests/detect.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ACTION="$here/../actions/detect-workspaces/action.yml"
-JQF="$here/../actions/detect-workspaces/detect.jq"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-yq -r '.runs.steps[0].run' "$ACTION" > "$T/run.sh"
+(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+ACTION="$here/../actions/detect-workspaces/action.yml"
+[ "$(yq -r '.runs.steps[0].uses' "$ACTION")|$(yq -r '.runs.steps[1].run' "$ACTION")" = "denzhel/tfpls/actions/bin@main|tfpls detect" ] && ok "the action installs the binary and runs tfpls detect" || bad "the action does not run tfpls detect"
 
 gt() { git -C "$R" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
 R="$T/repo"; mkdir -p "$R"; gt init -q -b main
@@ -40,7 +40,7 @@ gt add -A >/dev/null; gt commit -qm base; BASE0=$(gt rev-parse HEAD)
 # shellcheck disable=SC2034
 run() {
   : > "$T/out"
-  OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" HEAD_REF="${4:-}" NAME="${2:-}" JQ="$JQF" VALIDATE="$here/../actions/detect-workspaces/validate.jq" bash "$T/run.sh" 2>&1); rc=$?
+  OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" HEAD_REF="${4:-}" NAME="${2:-}" "$T/tfpls" detect 2>&1); rc=$?
 }
 wss() { sed -n 's/^entries=//p' "$T/out" | jq -r '[.[].workspace] | sort | join(",")'; }
 field() { sed -n 's/^entries=//p' "$T/out" | jq -r --arg w "$1" --arg f "$2" '.[] | select(.workspace==$w) | .[$f]'; }
@@ -97,12 +97,7 @@ eq "default require_reviewed_plan is false" "$(field dev-us-east-1 require_revie
 eq "label is the workspace name" "$(field dev-us-east-1 label)" "dev-us-east-1"
 eq "stack-qualified name is kept" "$(field dev-us-east-1 name)" "terraform/dev-us-east-1"
 
-# glob semantics used by `ignore` (gitignore-like): checked through the same jq definition
-glob_matches() { jq -n -r --arg g "$1" --arg p "$2" -f <(sed -n '/^def globre/,/^  ) + "\$";/p' "$JQF"; echo '$p | test($g | globre)'); }
-for t in '**/*.md|README.md|true' '**/*.md|docs/deep/a.md|true' '**/*.md|a.mdx|false' 'docs/**|docs/a/b.md|true' 'docs/**|other/docs/a.md|false' 'workspaces/*|workspaces/dev|true' 'workspaces/*|workspaces/dev/x.tf|false' 'a?c|abc|true' 'a?c|a/c|false'; do
-  IFS='|' read -r g p want <<<"$t"
-  eq "glob '$g' vs '$p'" "$(glob_matches "$g" "$p")" "$want"
-done
+# the glob semantics used by `ignore` (gitignore-like) are unit-tested in internal/detect/glob_test.go
 
 # lock settings: defaults, overrides and validation
 cat > "$R/lock.yml" <<'Y'
@@ -128,7 +123,7 @@ Y
 run lock-bad2.yml "" "";  [ $rc -ne 0 ] && ok "invalid plan_lock is rejected" || bad "invalid plan_lock"
 
 # matrix size guard (GitHub allows at most 256 jobs per matrix)
-run() { : > "$T/out"; OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" HEAD_REF="${4:-}" NAME="${2:-}" JQ="$JQF" VALIDATE="$here/../actions/detect-workspaces/validate.jq" TFPLS_MAX_MATRIX="${TFPLS_MAX_MATRIX:-256}" bash "$T/run.sh" 2>&1); rc=$?; }
+run() { : > "$T/out"; OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" HEAD_REF="${4:-}" NAME="${2:-}" TFPLS_MAX_MATRIX="${TFPLS_MAX_MATRIX:-256}" "$T/tfpls" detect 2>&1); rc=$?; }
 TFPLS_MAX_MATRIX=3 run .tfpls.yml "" ""
 [ $rc -ne 0 ] && ok "more workspaces than the matrix limit => error" || bad "limit not enforced"
 case "$OUT" in *"selects 4 workspaces"*"at most 3 jobs"*"Split the change"*) ok "the error says how many were selected, the limit and what to do";; *) bad "message: $OUT";; esac
