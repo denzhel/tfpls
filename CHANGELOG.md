@@ -4,6 +4,10 @@ All notable changes to tfpls. Versions follow SemVer; consumers pin with `@v0` o
 
 Versions below 1.0 (0.x): the interface may still change between minor versions; read the notes before updating.
 
+## Unreleased
+
+- Maintainers: the onboarding pty test in `tests/onboard.test.sh` no longer fails by chance (it killed a finished child when the terminal reported its end a moment before the child could be reaped, about 1 run in 150 on a busy machine); the helper now waits for the exit, and three checks pin the helper itself.
+
 ## v0.4.0
 
 - **Changed (breaking for a per-workspace webhook):** `notify_secret` now names a **key** of one secret, `TFPLS_NOTIFY_WEBHOOKS` (a JSON object `{"KEY": "https://..."}`), instead of a secret of its own. The workflows looked the secret up by a computed name (`secrets[notify_secret]`), and that makes GitHub hand every secret of the caller (with `secrets: inherit`: every repository and organisation secret) to the jobs that run OpenTofu, including the `/tofu plan` job that runs pull request code (CodeQL `actions/excessive-secrets-exposure`). Now every job gets only the secrets it names. The default `SLACK_WEBHOOK` is unchanged. **Migrate** if a workspace sets `notify_secret`: create the secret `TFPLS_NOTIFY_WEBHOOKS` with one entry per name your config uses, e.g. `{"SLACK_WEBHOOK_ONCALL": "<the URL from the secret SLACK_WEBHOOK_ONCALL>"}`; the config stays as it is; then delete the old secrets. Until then those workspaces send nothing and the run log warns. The reusable workflows declare exactly the secrets they use: `tofu.yml` declares all four (`TFPLS_ENV_JSON`, `PLAN_ENCRYPTION_KEY`, `SLACK_WEBHOOK`, `TFPLS_NOTIFY_WEBHOOKS`), so a caller may list them instead of `secrets: inherit`; `plan.yml` and `locks.yml` no longer declare `SLACK_WEBHOOK`, which they never used. Maintainers: `tests/secrets-exposure.test.sh` fails on a computed `secrets[...]`, on `toJSON(secrets)` and on an undeclared or unused secret; `tests/finish-webhook.test.sh` covers the lookup and the masking.
