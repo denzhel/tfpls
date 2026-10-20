@@ -8,6 +8,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 - Maintainers: the Go port reads YAML with `go.yaml.in/yaml/v3` through `internal/yamlconf` (what `yq -o=json` gave the scripts; checked against `yq` on every workflow, action and example file of the repository); it is the only dependency besides the standard library.
 - Maintainers: shared Go helpers for the port: `internal/ghactions` (step outputs with a delimiter that cannot be forged, environment, PATH, summary, escaped annotations, masks) and `internal/gh` (the `gh` CLI as a process); each subcommand registers itself in `cmd/tfpls/cmd_<name>.go`.
+- Maintainers: `actions/codeowners` runs the Go `tfpls codeowners enforce` (`internal/codeowners`; `check.sh` and `enforce.sh` are gone; `tfpls codeowners check` is the checker). Same inputs and messages. Fixes: the base ref is URL-escaped in the CODEOWNERS lookup, a non-numeric `comment_id` never reaches the API, a team slug with odd characters is never sent to the API, an entry without `owner_paths` no longer becomes the path `null`, and an empty list of paths is refused with a clear message instead of a usage error.
+
 ## v0.6.0
 
 - **Fixed:** `actions/result` could not be used at all: GitHub reads `${{ toJSON(needs) }}` in an input description as an expression and refused to load the action ("Unrecognized named-value: needs"). The description is reworded, and `tests/action-descriptions.test.sh` fails on an expression in any action's input description. If you worked around this, remove the workaround.

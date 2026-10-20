@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Tests for actions/codeowners/check.sh
+# Tests for `tfpls codeowners check|enforce` (internal/codeowners)
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-C="$here/actions/codeowners/check.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+C="$T/tfpls"
 cat > "$T/CODEOWNERS" <<'X'
 # default owners
 *                              @platform
@@ -17,7 +18,7 @@ printf '@org/sre dave erin\n' > "$T/teams"; export TFPLS_TEAMS_FILE="$T/teams"
 rev() { # login state sha [time]
   jq -cn --arg u "$1" --arg s "$2" --arg c "$3" --arg t "${4:-2026-10-10T10:00:00Z}" '{user:{login:$u},state:$s,commit_id:$c,submitted_at:$t}'; }
 mk() { printf '%s\n' "$@" | jq -s '.' > "$T/reviews.json"; }
-c() { bash "$C" "$T/CODEOWNERS" "$T/reviews.json" HEAD "$@" 2>&1; echo "rc=$?"; }
+c() { "$C" codeowners check "$T/CODEOWNERS" "$T/reviews.json" HEAD "$@" 2>&1; echo "rc=$?"; }
 
 mk "$(rev alice APPROVED HEAD)"
 eq "a user owner approving satisfies the path" "$(c workspaces/prod-us-west-1 | tail -1)" "rc=0"
@@ -44,12 +45,12 @@ eq "the catch-all rule applies to unlisted paths" "$(c workspaces/stg-us-west-2 
 mk "$(rev nobody COMMENTED HEAD)"
 eq "a comment is not an approval" "$(c workspaces/stg-us-west-2 | tail -1)" "rc=1"
 : > "$T/empty"; mk "$(rev x APPROVED HEAD)"
-eq "no CODEOWNERS match: no requirement" "$(bash "$C" "$T/empty" "$T/reviews.json" HEAD workspaces/x >/dev/null 2>&1; echo $?)" "0"
-eq "usage errors exit 2" "$(bash "$C" "$T/nope" "$T/reviews.json" HEAD p >/dev/null 2>&1; echo $?)" "2"
+eq "no CODEOWNERS match: no requirement" "$("$C" codeowners check "$T/empty" "$T/reviews.json" HEAD workspaces/x >/dev/null 2>&1; echo $?)" "0"
+eq "usage errors exit 2" "$("$C" codeowners check "$T/nope" "$T/reviews.json" HEAD p >/dev/null 2>&1; echo $?)" "2"
 
-# enforce.sh: only a 404 means "no CODEOWNERS file"; an API error must refuse
+# enforce: only a 404 means "no CODEOWNERS file"; an API error must refuse
 mkdir -p "$T/gb"; printf '#!/bin/sh\ncase "$*" in *contents*) echo "$FAKE_ERR" >&2; exit 1;; *) exit 0;; esac\n' > "$T/gb/gh"; chmod +x "$T/gb/gh"
-run_enf() { env -i PATH="$T/gb:$PATH" FAKE_ERR="$1" REPO=o/r BASE=main PR=1 SHA=abc ENTRIES='[]' bash "$here/actions/codeowners/enforce.sh" >/dev/null 2>&1; echo $?; }
+run_enf() { env -i PATH="$T/gb:$PATH" FAKE_ERR="$1" REPO=o/r BASE=main PR=1 SHA=abc ENTRIES='[]' "$T/tfpls" codeowners enforce >/dev/null 2>&1; echo $?; }
 eq "a missing CODEOWNERS file (404) enforces nothing" "$(run_enf 'gh: Not Found (HTTP 404)')" 0
 eq "an API error refuses" "$(run_enf 'gh: Bad Gateway (HTTP 502)')" 1
 
