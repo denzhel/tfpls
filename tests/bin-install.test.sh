@@ -19,7 +19,7 @@ printf '#!/bin/sh\nexit 0\n' > "$T/fakebin/gh-ok"; printf '#!/bin/sh\nexit 1\n' 
 
 # a PATH with only the tools the script needs (a runner has a real gh in /usr/bin, which the no-gh cases must not see)
 mkdir -p "$T/tools"
-for t in bash env curl tar tr awk cut mktemp mv cp chmod mkdir rm dirname uname sha256sum shasum head grep sed cat ln sleep date go; do
+for t in bash env curl tar tr awk cut mktemp mv cp chmod mkdir rm dirname uname sha256sum shasum head grep sed cat ln sleep date gzip go; do
   p=$(command -v "$t" 2>/dev/null) && [ -n "$p" ] && ln -sf "$p" "$T/tools/$t"
 done
 
