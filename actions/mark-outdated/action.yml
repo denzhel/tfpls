@@ -14,10 +14,11 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
         PR: ${{ inputs.pr_number }}
         NAMES: ${{ inputs.names }}
         SHA: ${{ inputs.sha }}
-      run: ${{ github.action_path }}/mark.sh
+      run: tfpls mark-outdated

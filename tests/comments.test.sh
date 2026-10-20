@@ -6,6 +6,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/actions/tofu/format.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 
 # ---- tfpls_clip_plan
 printf 'small plan\nPlan: 1 to add, 0 to change, 0 to destroy.\n' > "$T/small.txt"
@@ -134,9 +135,9 @@ cat > "$T/comments.json" <<'J'
  {"id":4,"body":"just a human comment, mentions <!-- tfpls: in the middle"}
 ]
 J
-mark() { rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/comments.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES="$(jq -c '[.[].name]' <<<"$1")" bash "$here/actions/mark-outdated/mark.sh" >/dev/null 2>&1; rc=$?; }
+mark() { rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/comments.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES="$(jq -c '[.[].name]' <<<"$1")" "$T/tfpls" mark-outdated >/dev/null 2>&1; rc=$?; }
 mark '{"terraform/dev":{"name":"terraform/dev"}}'
-[ $rc -eq 0 ] && ok "mark.sh succeeds" || bad "rc=$rc"
+[ $rc -eq 0 ] && ok "tfpls mark-outdated succeeds" || bad "rc=$rc"
 grep -q "comments/5" "$T/patched" 2>/dev/null && bad "a stranger's comment with the marker was edited" || ok "a stranger's comment that starts with the marker is never edited"
 [ "$(cat "$T/patched" 2>/dev/null)" = "repos/o/r/issues/comments/2" ] && ok "only the comment of the unselected workspace is updated" || bad "patched: $(cat "$T/patched" 2>/dev/null | tr '\n' ' ')"
 grep -q "Outdated" "$T/bodies" && grep -q "abcdef1" "$T/bodies" && ok "the banner names the latest commit" || bad "banner"
@@ -154,7 +155,7 @@ cat > "$T/several.json" <<'J'
  {"id":21,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\nplan new"}
 ]
 J
-rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/several.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES='[]' bash "$here/actions/mark-outdated/mark.sh" >/dev/null 2>&1
+rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/several.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES='[]' "$T/tfpls" mark-outdated >/dev/null 2>&1
 [ "$(cat "$T/patched" 2>/dev/null)" = "repos/o/r/issues/comments/21" ] && ok "with several comments of a workspace only the newest is marked outdated" || bad "patched: $(cat "$T/patched" 2>/dev/null | tr '\n' ' ')"
 
 # ---- tfpls_post_comment: every run posts a new comment, the older ones get a "superseded" banner
