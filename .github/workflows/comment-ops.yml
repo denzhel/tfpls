@@ -21,7 +21,8 @@ on:
       require_up_to_date: { type: boolean, default: true, description: "apply needs the PR branch to include the base branch" }
     secrets:
       TFPLS_ENV_JSON: { required: false }
-      SLACK_WEBHOOK: { required: false }
+      SLACK_WEBHOOK: { required: false, description: "the default notification webhook" }
+      TFPLS_NOTIFY_WEBHOOKS: { required: false, description: 'JSON object {"KEY": "https://..."} of further webhooks; notify_secret names a key (docs/notifications.md)' }
       PLAN_ENCRYPTION_KEY: { required: false, description: 'encrypts saved plans (recommended); see docs/reviewed-plans.md' }
 
 jobs:
@@ -247,7 +248,10 @@ jobs:
         with:
           entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
           label: ${{ matrix.label }}
-          webhook: ${{ secrets[fromJSON(needs.parse.outputs.entries)[matrix.label].notify_secret || 'SLACK_WEBHOOK'] }}
+          # by name only: a computed secrets[...] lookup hands every secret of the caller to this runner. GitHub sends the secrets
+          # per job, so the /tofu plan and unlock runs of this job get the two webhook secrets too (docs/security-model.md)
+          webhook: ${{ secrets.SLACK_WEBHOOK }}
+          webhooks: ${{ secrets.TFPLS_NOTIFY_WEBHOOKS }}
           template_ref: ${{ github.event.repository.default_branch }}
           pr: ${{ github.event.issue.number }}
           status: ${{ steps.t.outputs.status || 'error' }}

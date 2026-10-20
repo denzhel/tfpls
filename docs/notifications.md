@@ -87,11 +87,21 @@ Rules:
 
 ## Per workspace: another channel, another system, a mention
 
-A Slack incoming webhook belongs to one channel, so "another channel" means "another webhook": put it in its own secret and point workspaces at it by **name**:
+A Slack incoming webhook belongs to one channel, so "another channel" means "another webhook". Put the other webhooks into **one** secret, `TFPLS_NOTIFY_WEBHOOKS`: a JSON object from a key to a webhook URL.
+
+```json
+{
+  "SLACK_WEBHOOK_PLATFORM": "https://hooks.slack.com/services/…",
+  "SLACK_WEBHOOK_ONCALL": "https://hooks.slack.com/services/…",
+  "TEAMS_WEBHOOK": "https://….webhook.office.com/…"
+}
+```
+
+Save it with `gh secret set TFPLS_NOTIFY_WEBHOOKS < webhooks.json` (then delete the file) and point workspaces at a **key**:
 
 ```yaml
 defaults:
-  notify_secret: SLACK_WEBHOOK_PLATFORM      # secret NAME (capital letters, digits, _), never the URL
+  notify_secret: SLACK_WEBHOOK_PLATFORM      # a KEY of TFPLS_NOTIFY_WEBHOOKS (capital letters, digits, _), never the URL
 overrides:
   "prod-*":
     notify_secret: SLACK_WEBHOOK_ONCALL
@@ -109,7 +119,15 @@ overrides:
 
 The Teams and generic formats keep posting every status (including `no-changes`); only the default Slack message skips runs without changes. The mention is added only when the status is a failure or drift, never for successes. Summaries are cut to 500 characters and contain no plan values. A failing webhook never fails a run (it logs a warning).
 
-`notify_secret` needs the caller to pass the secret on (`secrets: inherit`); a name that does not exist in the repository simply means no message.
+How the webhook is chosen:
+- No `notify_secret`, or `SLACK_WEBHOOK`: the secret `SLACK_WEBHOOK`; when that is not set, the key `SLACK_WEBHOOK` of `TFPLS_NOTIFY_WEBHOOKS`; when neither exists, nothing is sent.
+- Any other `notify_secret`: that key of `TFPLS_NOTIFY_WEBHOOKS`. A key that is not there, a secret that is not set or is not a JSON object, or a value that is not an `http(s)://` URL logs a warning and sends nothing; the run never fails.
+- The URL that is used is masked in the log: GitHub masks a secret as a whole (and line by line), not each value inside a JSON secret.
+- The caller passes both secrets on with `secrets: inherit`, or lists them ([reference.md](reference.md)).
+
+Why one secret and not one secret per workspace: picking a secret by a computed name (`secrets[name]`) makes GitHub hand **every** secret the workflow can see to the job, and with `secrets: inherit` that is every repository and organisation secret of the caller, in the jobs that run OpenTofu (and, for `/tofu plan`, the code of a pull request). The workflows name the two webhook secrets instead, so those are all a job gets for notifications ([security model](security-model.md#what-the-jobs-can-reach)).
+
+**Coming from a secret per workspace (v0.3.0 and earlier).** `notify_secret` was the name of a secret of its own. Copy each of those secrets into `TFPLS_NOTIFY_WEBHOOKS` under the same name (`{"SLACK_WEBHOOK_ONCALL": "<its URL>", ...}`); the config stays as it is; then delete the old secrets. Until then such a workspace sends nothing, and its run log warns.
 
 [Drift](drift.md) messages are sent only when a workspace changes state, not on every run.
 
@@ -118,3 +136,5 @@ The Teams and generic formats keep posting every status (including `no-changes`)
 Slack (first version of the message, before the current layout): five real messages were accepted by a Slack incoming webhook in a test repository: a successful apply (`applied`), a failed apply (`error`), a drift alert (`drift`) and the two recoveries (`in-sync`) from a drift run with `drift_issues: true`. Each run log says `slack notification sent for <workspace> (<status>)` when the webhook accepted the message and warns `notification failed` otherwise. Mentions (`notify_mention`) and the Teams and generic formats were exercised against a local receiver and unit tests, not a real Teams/Slack mention.
 
 The current layout was checked in a test repository with the same kind of webhook: a default success message after a merge apply, a failure message (an apply without a reviewed plan, with the author, the pull request and the error), a custom template (`{"text": "custom: ..."}` posted exactly as written) and runs without changes that sent nothing. The run log of every notification contains the message, so a run can be checked without Slack. Not exercised live: the mention on a real failure, drift messages in the new layout, and a template with a jq syntax error (unit tests only).
+
+The choice of the webhook (the default, a key of `TFPLS_NOTIFY_WEBHOOKS`, the warnings and the masking) is covered by `tests/finish-webhook.test.sh`; a webhook taken from `TFPLS_NOTIFY_WEBHOOKS` has not been exercised live yet.

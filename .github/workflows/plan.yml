@@ -12,7 +12,6 @@ on:
       allow_unencrypted_plans: { type: boolean, default: false, description: "true = a plan saved without PLAN_ENCRYPTION_KEY on a private repository is stored unencrypted without the warning (default: warn); public repositories never save one" }
     secrets:
       TFPLS_ENV_JSON: { required: false, description: 'JSON map of env vars for providers/backend' }
-      SLACK_WEBHOOK: { required: false }
       PLAN_ENCRYPTION_KEY: { required: false, description: 'encrypts saved plans (recommended); see docs/reviewed-plans.md' }
 
 jobs:

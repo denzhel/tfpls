@@ -19,7 +19,10 @@ inputs:
     description: "kind shown in the message, default: kind"
     default: ""
   webhook:
-    description: "the webhook URL: secrets[entry.notify_secret || 'SLACK_WEBHOOK'] (composite actions cannot read secrets)"
+    description: "secrets.SLACK_WEBHOOK, the default webhook (composite actions cannot read secrets; pass each secret by name)"
+    default: ""
+  webhooks:
+    description: 'secrets.TFPLS_NOTIFY_WEBHOOKS, a JSON object {"KEY": "https://..."} of further webhooks; entry.notify_secret names a key'
     default: ""
   template_ref:
     default: ""
@@ -50,10 +53,19 @@ inputs:
 runs:
   using: composite
   steps:
+    # the workspace's webhook: notify_secret is a key of TFPLS_NOTIFY_WEBHOOKS (default: SLACK_WEBHOOK); masked before the next step shows it
+    - id: hook
+      if: always() && inputs.notify == 'true'
+      shell: bash
+      env:
+        KEY: ${{ fromJSON(inputs.entry).notify_secret }}
+        DEFAULT_HOOK: ${{ inputs.webhook }}
+        HOOKS: ${{ inputs.webhooks }}
+      run: ${{ github.action_path }}/webhook.sh
     - if: always() && inputs.notify == 'true'
       uses: denzhel/tfpls/actions/notify-slack@main
       with:
-        webhook: ${{ inputs.webhook }}
+        webhook: ${{ steps.hook.outputs.url }}
         format: ${{ fromJSON(inputs.entry).notify_format }}
         mention: ${{ fromJSON(inputs.entry).notify_mention }}
         template: ${{ fromJSON(inputs.entry).notify_template }}

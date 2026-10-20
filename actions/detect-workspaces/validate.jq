@@ -32,7 +32,7 @@ def check_setting($k; $v; $path):
   elif $k == "approvals" then
     [err($path; "was removed in v0.9.0: the number of approvals comes from the repository's own settings (the pull_request rule of a ruleset on the default branch); delete this key. A repository admin can apply in an emergency with `/tofu apply <workspace> --now`")]
   elif $k == "notify_secret" then
-    (if ($v | type) == "string" and ($v | test("^[A-Z][A-Z0-9_]*$")) then [] else [err($path; "must be the NAME of a secret (capital letters, digits and `_`), not its value")] end)
+    (if ($v | type) == "string" and ($v | test("^[A-Z][A-Z0-9_]*$")) then [] else [err($path; "must be SLACK_WEBHOOK or a key of the secret TFPLS_NOTIFY_WEBHOOKS (capital letters, digits and `_`), not a webhook URL")] end)
   elif $k == "notify_template" then
     (if ($v | type) == "string" and ($v | test("^[A-Za-z0-9_.][A-Za-z0-9_./-]*$")) and ($v | contains("..") | not) then [] else [err($path; "must be a relative path inside the repository (no leading `/`, no `..`), e.g. .github/tfpls/slack.jq")] end)
   elif $k == "notify_format" then
