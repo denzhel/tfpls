@@ -17,13 +17,19 @@ printf '%s  %s\n' "$(sha "$rel/tfpls_${os}_${arch}.tar.gz")" "tfpls_${os}_${arch
 printf '%s\n' "$V" > "$T/VERSION"
 printf '#!/bin/sh\nexit 0\n' > "$T/fakebin/gh-ok"; printf '#!/bin/sh\nexit 1\n' > "$T/fakebin/gh-bad"; chmod +x "$T/fakebin/"*
 
+# a PATH with only the tools the script needs (a runner has a real gh in /usr/bin, which the no-gh cases must not see)
+mkdir -p "$T/tools"
+for t in bash env curl tar tr awk cut mktemp mv cp chmod mkdir rm dirname uname sha256sum shasum head grep sed cat ln sleep date go; do
+  p=$(command -v "$t" 2>/dev/null) && [ -n "$p" ] && ln -sf "$p" "$T/tools/$t"
+done
+
 # run <name> [env...]: fresh cache and PATH file per call unless TFPLS_TOOL_CACHE is given; sets rc and out
 run() { # gh-mode then env assignments
   local gh=$1; shift
   rm -rf "$T/path-bin"; mkdir -p "$T/path-bin"
   [ "$gh" = none ] || ln -s "$T/fakebin/gh-$gh" "$T/path-bin/gh"
   : > "$T/ghpath"
-  out=$(env -i PATH="$T/path-bin:/usr/bin:/bin:/usr/local/bin:$(dirname "$(command -v curl)")" HOME="$T/home" GH_TOKEN=t GITHUB_PATH="$T/ghpath" \
+  out=$(env -i PATH="$T/path-bin:$T/tools" HOME="$T/home" GH_TOKEN=t GITHUB_PATH="$T/ghpath" \
         TFPLS_VERSION_FILE="$T/VERSION" TFPLS_RELEASE_BASE="file://$T/rel" TFPLS_OS=$os TFPLS_ARCH=$arch TFPLS_RETRY_DELAY=0 "$@" bash "$inst" 2>&1); rc=$?
 }
 pathdir() { head -1 "$T/ghpath"; }
@@ -71,7 +77,7 @@ run ok TFPLS_TOOL_CACHE="$T/c7" TFPLS_RELEASE_BASE="file://$T/nowhere"
 
 # dev: built from the source of this checkout
 printf 'dev\n' > "$T/VERSION.dev"
-run none TFPLS_VERSION_FILE="$T/VERSION.dev" RUNNER_TEMP="$T/rt" HOME="$HOME" PATH="$(dirname "$(command -v go)"):$T/path-bin:/usr/bin:/bin"
+run none TFPLS_VERSION_FILE="$T/VERSION.dev" RUNNER_TEMP="$T/rt" HOME="$HOME"
 [ $rc -eq 0 ] && [ "$("$(pathdir)/tfpls" version)" = dev ] && grep -q "building tfpls from the source" <<<"$out" && ok "dev builds the binary from this checkout" || bad "dev build: $out"
 
 # the files that must stay in step
