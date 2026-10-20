@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Tests for actions/wait-for/wait.sh with a gh stub that serves a scripted sequence of job lists.
+# Tests for `tfpls wait-for` (actions/wait-for) with a gh stub that serves a scripted sequence of job lists.
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-W="$here/actions/wait-for/wait.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; mkdir -p "$T/bin"
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 # the stub returns the Nth file of $T/seq (jobs lines) on the Nth call, then keeps returning the last one
 cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
@@ -14,7 +14,7 @@ cat "$f"
 STUB
 chmod +x "$T/bin/gh"
 seq_() { rm -rf "$T/seq" "$T/n"; mkdir -p "$T/seq"; i=0; for l in "$@"; do i=$((i+1)); printf '%b\n' "$l" > "$T/seq/$i"; done; }
-run() { WAIT_FOR="$1" TIMEOUT="${2:-1}" REPO=o/r RUN_ID=1 TFPLS_POLL=0 STUB_DIR="$T" PATH="$T/bin:$PATH" bash "$W" >"$T/out" 2>&1; rc=$?; }
+run() { WAIT_FOR="$1" TIMEOUT="${2:-1}" REPO=o/r RUN_ID=1 TFPLS_POLL=0 STUB_DIR="$T" PATH="$T/bin:$PATH" "$T/tfpls" wait-for >"$T/out" 2>&1; rc=$?; }
 j() { printf '{"name":"apply / %s","status":"%s","conclusion":%s}' "$1" "$2" "${3:-null}"; }
 
 seq_ "$(j prod completed '"success"')"
@@ -48,11 +48,9 @@ run prod; eq "the default matrix job name 'apply (prod)' matches" "$rc" 0
 printf '%s\n' '{"name":"apply (preprod)","status":"completed","conclusion":"success"}' > "$T/seq/1"
 run prod 0; eq "'apply (preprod)' does not match prod" "$rc" 1
 
-# the wait budget is never the whole job timeout
-sed -n '/^budget() /p' "$here/actions/wait-for/wait.sh" > "$T/budget.sh"; . "$T/budget.sh"
-eq "budget: 60 -> 45, 50 -> 35, 31 -> 16" "$(budget 60)|$(budget 50)|$(budget 31)" "45|35|16"
-eq "budget: 30 -> 15, 20 -> 10, 2 -> 1, 1 -> 1, 0 -> 0 (do not wait)" "$(budget 30)|$(budget 20)|$(budget 2)|$(budget 1)|$(budget 0)" "15|10|1|1|0"
-eq "budget: junk -> the default of 50 -> 35" "$(budget abc)|$(budget '')" "35|35"
-eq "the queue uses the same budget" "$(sed -n '/^budget() /p' "$here/actions/queue/queue.sh")" "$(sed -n '/^budget() /p' "$here/actions/wait-for/wait.sh")"
+# the wait budget is unit-tested in internal/waitfor; the queue action still has its own copy of the formula, which must agree
+sed -n '/^budget() /p' "$here/actions/queue/queue.sh" > "$T/budget.sh"; . "$T/budget.sh"
+eq "queue budget: 60 -> 45, 50 -> 35, 31 -> 16, 30 -> 15, 20 -> 10, 2 -> 1, 1 -> 1, 0 -> 0, junk -> 35" "$(budget 60)|$(budget 50)|$(budget 31)|$(budget 30)|$(budget 20)|$(budget 2)|$(budget 1)|$(budget 0)|$(budget abc)" "45|35|16|15|10|1|1|0|35"
+eq "action.yml installs the binary, then runs tfpls wait-for" "$(yq -r '.runs.steps[0].uses' "$here/actions/wait-for/action.yml")|$(yq -r '.runs.steps[1].run' "$here/actions/wait-for/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls wait-for"
 
 done_tests
