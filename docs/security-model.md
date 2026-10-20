@@ -53,7 +53,7 @@ GitHub's free security scanners run on the tfpls repository itself. They look fo
 | **Dependabot security updates** | an alert for which a fixed version exists | after such an alert: opens a pull request that moves the dependency to the fixed version | no |
 | **Private vulnerability reporting** | a report sent through Security → Report a vulnerability ([SECURITY.md](../SECURITY.md)) | when someone reports | no |
 
-For an action, GitHub raises a Dependabot alert only when it is referenced by a version tag, not by a commit SHA, and tfpls pins every third-party action by SHA. So in this repository Dependabot alerts and security updates cover what may be added later; the pinned actions are kept current by Dependabot *version updates* ([dependencies.md](https://github.com/denzhel/tfpls/blob/main/docs/dependencies.md#dependabot)).
+For an action, GitHub raises a Dependabot alert only when it is referenced by a version tag, not by a commit SHA, and tfpls pins every third-party action by SHA. So in this repository Dependabot alerts and security updates cover what may be added later; the pinned actions are kept current by Dependabot *version updates* ([dependencies.md](dependencies.md#dependabot)).
 
 Not on for tfpls: *generic patterns* (private keys, connection strings) and *validity checks* (GitHub asks the provider whether a found token still works), which GitHub does not turn on for this repository, a public repository of a personal account; *AI-detected passwords*, offered to organization repositories with GitHub Secret Protection; *AI Scan for pull requests*, which is billed per use ([below](#how-it-works-and-what-is-ai)).
 
