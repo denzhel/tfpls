@@ -12,6 +12,7 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: export
       shell: bash
       env:
@@ -19,4 +20,4 @@ runs:
         ROLE_ARN: ${{ inputs.role_arn }}
         REPORT_PR: ${{ inputs.report_pr }}
         GH_TOKEN: ${{ inputs.github_token }}
-      run: ${{ github.action_path }}/export.sh
+      run: tfpls env
