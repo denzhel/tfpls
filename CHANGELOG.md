@@ -14,6 +14,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 - Maintainers: shared Go helpers for the port: `internal/ghactions` (step outputs with a delimiter that cannot be forged, environment, PATH, summary, escaped annotations, masks) and `internal/gh` (the `gh` CLI as a process); each subcommand registers itself in `cmd/tfpls/cmd_<name>.go`.
 - Maintainers: `actions/detect-workspaces` runs the Go `tfpls detect` (`internal/detect`) instead of Bash and jq (`detect.jq`, `validate.jq` are gone); same inputs, outputs, messages and exit codes. `tfpls validate-config` prints the config problems of a YAML/JSON file as JSON (used by `actions/approvals`). Fixes: changed files are read NUL-separated (a path with a space or quote now matches its workspace), a workspace named `.` or `..` is refused, a base or head ref that looks like an option is refused, an invalid `lock_timeout`/`notify_secret`/name with a trailing newline no longer passes, an unreadable `workspaces_file` fails instead of selecting nothing, and `workspaces_glob` no longer splits on spaces or lists dot directories.
 - Maintainers: `pr-notes` and `mark-outdated` run as `tfpls pr-notes` and `tfpls mark-outdated` (Go, `internal/prcomments`); an unreadable `names` list now marks nothing instead of marking every plan outdated.
+- Maintainers: `finish` runs as `tfpls finish webhook` and `tfpls finish store` (Go: `internal/finish`, on `internal/record` and `internal/datastore`).
 
 ## v0.6.0
 

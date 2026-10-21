@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Tests for actions/finish/webhook.sh: a workspace's notify_secret is a key of the secret TFPLS_NOTIFY_WEBHOOKS (the default,
+# Tests for `tfpls finish webhook`: a workspace's notify_secret is a key of the secret TFPLS_NOTIFY_WEBHOOKS (the default,
 # SLACK_WEBHOOK, is the secret of that name), the chosen URL is masked before any step can show it, and a wrong key, map or
 # URL logs a warning and never fails the job. Plus the wiring in actions/finish/action.yml.
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
-S="$here/actions/finish/webhook.sh"
 F="$here/actions/finish/action.yml"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 # pick [VAR=value ...]: run the script in an empty environment; prints rc=<status>; the log is in $T/log, the step output in $T/out
-pick() { : > "$T/out"; env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" "$@" bash "$S" > "$T/log" 2>&1; echo "rc=$?"; }
+pick() { : > "$T/out"; env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" "$@" "$T/tfpls" finish webhook > "$T/log" 2>&1; echo "rc=$?"; }
 url() { sed -n 's/^url=//p' "$T/out"; }
 warns() { grep -c '^::warning::' "$T/log"; }
 # no line of the log but the mask command shows a URL of the test values (all on the host hook.invalid)
@@ -18,7 +18,6 @@ shown() { grep -v '^::add-mask::' "$T/log" | grep -c 'hook[.]invalid'; }
 D=https://hook.invalid/default
 M='{"ONCALL": "https://hook.invalid/oncall", "TEAMS_WEBHOOK": "https://hook.invalid/teams", "SLACK_WEBHOOK": "https://hook.invalid/in-map"}'
 
-eq "the script is executable (finish runs it by path)" "$([ -x "$S" ] && echo yes)" yes
 # ---- the default
 eq "no notify_secret: the secret SLACK_WEBHOOK" "$(pick DEFAULT_HOOK="$D" HOOKS="$M")|$(url)|$(warns)" "rc=0|$D|0"
 eq "notify_secret SLACK_WEBHOOK is the same default" "$(pick KEY=SLACK_WEBHOOK DEFAULT_HOOK="$D" HOOKS="$M")|$(url)" "rc=0|$D"
@@ -50,10 +49,11 @@ eq "a key with odd characters is not echoed raw into a workflow command" "$(pick
 # ---- the wiring: finish picks the webhook, then notify-slack posts to it
 eq "finish reads the key from the entry and the two secrets from its inputs" \
   "$(yq -r '.runs.steps[] | select(.id == "hook") | [.env.KEY, .env.DEFAULT_HOOK, .env.HOOKS, .run] | join("|")' "$F")" \
-  '${{ fromJSON(inputs.entry).notify_secret }}|${{ inputs.webhook }}|${{ inputs.webhooks }}|${{ github.action_path }}/webhook.sh'
+  '${{ fromJSON(inputs.entry).notify_secret }}|${{ inputs.webhook }}|${{ inputs.webhooks }}|tfpls finish webhook'
 eq "notify-slack posts to the picked webhook" "$(yq -r '.runs.steps[] | select((.uses // "") | test("actions/notify-slack@")) | .with.webhook' "$F")" '${{ steps.hook.outputs.url }}'
-eq "the webhook is picked first, and only when there is something to send" \
-  "$(yq -r '[.runs.steps[] | (.id // .uses // "-")] | .[0:2] | join(" ")' "$F")|$(yq -r '.runs.steps[0].if' "$F")" \
+eq "the binary is installed first: " "$(yq -r '.runs.steps[0].uses' "$F")" "denzhel/tfpls/actions/bin@main"
+eq "the webhook is picked next, and only when there is something to send" \
+  "$(yq -r '[.runs.steps[] | (.id // .uses // "-")] | .[1:3] | join(" ")' "$F")|$(yq -r '.runs.steps[1].if' "$F")" \
   "hook denzhel/tfpls/actions/notify-slack@main|always() && inputs.notify == 'true'"
 
 done_tests
