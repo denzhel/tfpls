@@ -35,6 +35,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: detect
       shell: bash
       env:
@@ -43,104 +44,4 @@ runs:
         BASE: ${{ inputs.base_ref }}
         HEAD_REF: ${{ inputs.head_ref }}
         NAME: ${{ inputs.name }}
-        JQ: ${{ github.action_path }}/detect.jq
-        VALIDATE: ${{ github.action_path }}/validate.jq
-      run: |
-        set -euo pipefail
-        # no config file (or an empty one) is fine: the defaults apply (one workspace per directory of workspaces/*)
-        if [ -f "$CONFIG" ]; then cfg=$(yq -o=json '.' "$CONFIG"); [ -n "$cfg" ] && [ "$cfg" != null ] || cfg='{}'
-        else cfg='{}'; echo "::notice::no $CONFIG: using the defaults (one workspace per directory of workspaces/*, nothing auto-applies)"; fi
-
-        # report config problems with their path: errors stop the run, warnings (unknown keys = probable typos) are shown
-        problems=$(jq -c -f "$VALIDATE" <<<"$cfg")
-        jq -r '.[] | "::\(.level)::\(.msg)"' <<<"$problems"
-        if jq -e 'any(.[]; .level == "error")' <<<"$problems" >/dev/null; then
-          echo "::error::$CONFIG has errors (see above); the format is described in the README and examples/.tfpls.yml"; exit 1
-        fi
-
-        # `stacks:` (one root module, many workspaces). Default stack (no `stacks`): the common layout, one workspace per directory of workspaces/*.
-        # Top-level `overrides` apply to every stack (a stack's own overrides win).
-        norm=$(jq -c '
-          (.overrides // {}) as $top
-          | { defaults: (.defaults // {}),
-              stacks: (if .stacks then (.stacks | map(. + {overrides: ($top + (.overrides // {}))}))
-                       else [ { name: "terraform", dir: ".", workspaces_glob: "workspaces/*",
-                                workspace_paths: ["workspaces/{workspace}/"],
-                                ignore: ["**/*.md", "docs/**", ".github/**", "LICENSE*", ".gitignore"],
-                                overrides: $top } ] end) }' <<<"$cfg")
-
-        resolved='[]'
-        n=$(jq '.stacks | length' <<<"$norm")
-        for i in $(seq 0 $((n - 1))); do
-          s=$(jq -c ".stacks[$i]" <<<"$norm")
-          list=$(jq -c '.workspaces // []' <<<"$s")
-          f=$(jq -r '.workspaces_file // empty' <<<"$s")
-          g=$(jq -r '.workspaces_glob // empty' <<<"$s")
-          if [ -n "$f" ]; then
-            list=$(sed 's/[[:space:]]*#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' "$f" | grep -v '^$' | jq -R . | jq -sc .)
-          elif [ -n "$g" ]; then
-            list=$(for p in $g; do if [ -d "$p" ]; then basename "$p"; fi; done | jq -R . | jq -sc .)
-          fi
-          resolved=$(jq -c --argjson s "$s" --argjson l "${list:-[]}" '. + [$s + {wslist: $l}]' <<<"$resolved")
-        done
-        norm=$(jq -c --argjson r "$resolved" '.stacks = $r' <<<"$norm")
-
-        # validate stack/workspace names early (they end up in commands and file names)
-        jq -e '[.stacks[] | .wslist[] | select(. != null)] | all(test("^[A-Za-z0-9_.-]+$"))' <<<"$norm" >/dev/null \
-          || { echo "::error::workspace names must match [A-Za-z0-9_.-]+"; exit 1; }
-
-        jq -e '[.stacks[] | .triggers // {} | select(. != {})]
-               | all(type == "object" and all(.[]; type == "array" and all(.[]; type == "string")))' <<<"$norm" >/dev/null \
-          || { echo "::error::triggers must map a workspace glob to a list of workspace globs"; exit 1; }
-
-        changed=null
-        if [ -n "$NAME" ]; then
-          : # explicit selection ignores the diff
-        elif [ "$MODE" = "all" ] || [ -z "$BASE" ] || [[ "$BASE" =~ ^0+$ ]] \
-             || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-          : # no usable base (new branch, force-push): consider everything
-        else
-          changed=$(git diff --name-only --no-renames "$BASE"..."${HEAD_REF:-HEAD}" | jq -R . | jq -sc .)
-        fi
-
-        # warnings that help a newcomer: no workspace at all, or an override that matches nothing
-        configured=$(jq '[.stacks[] | (.wslist // [])[]] | length' <<<"$norm")
-        if [ "$configured" -eq 0 ]; then
-          echo "::warning::no workspaces found: the default layout is one folder per workspace under workspaces/ ; describe another layout with stacks: in $CONFIG (see the README)"
-          { echo "### No workspaces found"; echo; echo "The default layout is one folder per workspace under \`workspaces/\`. Describe another layout with \`stacks:\` in \`$CONFIG\`."; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-        fi
-        jq -r --arg probe 1 --argjson defaults '{}' --argjson changed null --argjson select '[]' --arg names '' -f "$JQ" <<<"$norm" \
-          | jq -r '.[] | "::warning::override \"\(.)\" matches no workspace and no stack name (check the spelling)"' || true
-
-        sel=$(jq -c --argjson changed "$changed" --arg names "$NAME" \
-          --argjson defaults "$(jq -c .defaults <<<"$norm")" \
-          --argjson select "$(jq -cn --arg n "$NAME" '$n | split(" ") | map(select(length > 0))')" \
-          -f "$JQ" <<<"$norm")
-
-        jq -e 'all(.[]; .auto_apply | IN("never","always","additive_only"))' <<<"$sel" >/dev/null \
-          || { echo "::error::auto_apply must be never|always|additive_only"; exit 1; }
-        jq -e 'all(.[]; .lock_timeout | test("^[0-9]+(s|m|h)$"))' <<<"$sel" >/dev/null \
-          || { echo "::error::lock_timeout must look like 30s, 5m or 1h"; exit 1; }
-        jq -e 'all(.[]; .plan_lock | IN("true","false"))' <<<"$sel" >/dev/null \
-          || { echo "::error::plan_lock must be true or false"; exit 1; }
-        # GitHub allows at most 256 jobs in one matrix: fail early with advice instead of an obscure workflow error
-        max_matrix="${TFPLS_MAX_MATRIX:-256}"
-        count=$(jq 'length' <<<"$sel")
-        if [ "$count" -gt "$max_matrix" ]; then
-          echo "::error::this change selects $count workspaces, but GitHub allows at most $max_matrix jobs in one matrix. Split the change into smaller pull requests, or plan in batches with /tofu plan <glob>."
-          exit 1
-        fi
-        jq -e '([.[].name] | length) == ([.[].name] | unique | length)' <<<"$sel" >/dev/null \
-          || { echo "::error::duplicate stack/workspace names"; exit 1; }
-
-        jq -e '([.[].label] | length) == ([.[].label] | unique | length)' <<<"$sel" >/dev/null \
-          || { echo "::error::duplicate job labels"; exit 1; }
-
-        # The matrix has ONE key (label), so a job needs no custom name: matrix jobs show "plan (dev-us-east-1)" and a
-        # skipped job just shows its id, instead of an unresolved "matrix.label". All other fields are looked up from
-        # `entries` by label: fromJSON(needs.detect.outputs.entries)[matrix.label].dir
-        echo "matrix=$(jq -c '{include: map({label})}' <<<"$sel")" >> "$GITHUB_OUTPUT"
-        echo "entries=$(jq -c 'map({key: .label, value: .}) | from_entries' <<<"$sel")" >> "$GITHUB_OUTPUT"
-        echo "names=$(jq -c 'map(.name)' <<<"$sel")" >> "$GITHUB_OUTPUT"
-        echo "any=$(jq 'length > 0' <<<"$sel")" >> "$GITHUB_OUTPUT"
-        echo "configured=$configured" >> "$GITHUB_OUTPUT"
+      run: tfpls detect

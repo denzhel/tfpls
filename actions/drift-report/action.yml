@@ -23,6 +23,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: r
       shell: bash
       env:
@@ -37,4 +38,4 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
         REPO: ${{ github.repository }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: ${{ github.action_path }}/report.sh
+      run: tfpls drift-report

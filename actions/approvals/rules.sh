@@ -31,7 +31,7 @@ fi
 if [ "$have" = 1 ]; then
   base_json=$(yq -o=json '.' "$raw" 2>/dev/null) || refuse "the config on the default branch is not valid YAML; merge a fix there before \`/tofu apply\` can check approvals."
   [ -n "$base_json" ] && [ "$base_json" != null ] || base_json='{}'
-  problems=$(jq -c -f "$here/../detect-workspaces/validate.jq" <<<"$base_json")
+  problems=$(tfpls validate-config <<<"$base_json")
   if jq -e 'any(.[]; .level == "error")' <<<"$problems" >/dev/null; then
     refuse "the config on the default branch has errors ($(jq -r '[.[]|select(.level=="error")|.msg][0]' <<<"$problems")); merge a fix there before \`/tofu apply\` can check approvals."
   fi
