@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Config validation (actions/detect-workspaces/validate.jq): every mistake gets an actionable message with its path,
+# Config validation (`tfpls validate-config`, internal/detect/validate.go): every mistake gets an actionable message with its path,
 # unknown keys are warnings with a "did you mean" hint, valid configs are clean. Run: bash tests/config-validate.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-V="$here/actions/detect-workspaces/validate.jq"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 
 # check <name> <yaml> <level> <text that must appear in a message of that level>   (use level "none" for a clean config)
 check() {
   local name=$1 yaml=$2 level=$3 want=${4:-} out
-  out=$(printf '%s\n' "$yaml" | yq -o=json '.' | jq -c -f "$V")
+  out=$(printf '%s\n' "$yaml" | "$T/tfpls" validate-config)
   if [ "$level" = none ]; then
     [ "$out" = "[]" ] && ok "$name" || bad "$name (expected no problems, got $out)"
   else
@@ -82,7 +83,7 @@ check "unknown top-level key"                   $'stacks:\n  - name: s\n    work
 check "unknown key in defaults"                 $'defaults: { nope: 1 }\nstacks:\n  - name: s\n    workspaces: [a]' warning 'defaults: unknown key `nope`'
 
 # a typo only warns: the run is not blocked
-out=$(printf '%s\n' $'stacks:\n  - name: s\n    workspaces: [a]\n    autoapply: always' | yq -o=json '.' | jq -c -f "$V")
+out=$(printf '%s\n' $'stacks:\n  - name: s\n    workspaces: [a]\n    autoapply: always' | "$T/tfpls" validate-config)
 jq -e 'all(.[]; .level == "warning")' <<<"$out" >/dev/null && ok "warnings alone do not stop a run (no error level)" || bad "typo escalated to error"
 
 done_tests

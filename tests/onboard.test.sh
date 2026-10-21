@@ -36,7 +36,7 @@ chmod +x "$t/bin/gh"; export PATH="$t/bin:$PATH" STUB_LOG="$t/gh.log" STUB_DIR="
 ob() { "$init" "$@" </dev/null 2>&1; }                                     # no terminal: stdout captured, no input
 ans() { local a=$1; shift; printf '%b' "$a" | TFPLS_ONBOARD_TTY=/dev/stdin "$init" "$@" 2>&1; }   # answers via stdin
 snap() { (cd "$1" && find . -path ./.git -prune -o -type f -print | LC_ALL=C sort | while IFS= read -r f; do cksum "$f"; done); }
-valid() { jq -c -f "$here/actions/detect-workspaces/validate.jq" <<<"$(yq -o=json '.' "$1")"; }
+valid() { [ -x "$t/tfpls" ] || (cd "$here" && go build -o "$t/tfpls" ./cmd/tfpls); "$t/tfpls" validate-config < "$1"; }
 noop() { # noop <label> <dir> [options]: a second run changes no file and says so
   local d=$1 s1 o; shift; d=$1; shift
   s1=$(snap "$d"); o=$(ob "$@" "$d"); local rc=$?
