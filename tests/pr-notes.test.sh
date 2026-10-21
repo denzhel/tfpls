@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# actions/pr-notes/notes.sh: the first-run notes (pipeline added by this pull request, no workspaces) against a temp repo and a gh stub.
+# tfpls pr-notes: the first-run notes (pipeline added by this pull request, no workspaces) against a temp repo and a gh stub.
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-N="$here/actions/pr-notes/notes.sh"
 . "$here/tests/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+N="$T/tfpls pr-notes"
 mkdir -p "$T/bin" "$T/repo/.github/workflows"
 git -C "$T/repo" init -q -b main; git -C "$T/repo" config user.email t@t; git -C "$T/repo" config user.name t
 echo x > "$T/repo/README.md"; git -C "$T/repo" add -A; git -C "$T/repo" -c commit.gpgsign=false commit -qm base; BASE_NO=$(git -C "$T/repo" rev-parse HEAD)
@@ -23,7 +24,7 @@ STUB
 chmod +x "$T/bin/gh"
 run() { : > "$T/log"; : > "$T/body"; : > "$T/gho"
   ( cd "$T/repo" && env -i PATH="$T/bin:$PATH" STUB_LOG="$T/log" STUB_BODY="$T/body" STUB_COMMENTS="${STUB_COMMENTS:-}" GITHUB_OUTPUT="$T/gho" REPO=o/r PR=3 GH_TOKEN=x \
-      WF_REF="o/r/.github/workflows/tofu.yml@refs/pull/3/merge" BASE_SHA="${BASE_SHA:-}" CONFIG=.tfp.yml bash "$N" "$1" >"$T/out" 2>&1; echo $?); }
+      WF_REF="o/r/.github/workflows/tofu.yml@refs/pull/3/merge" BASE_SHA="${BASE_SHA:-}" CONFIG=.tfp.yml $N "$1" >"$T/out" 2>&1; echo $?); }
 out() { sed -n "s/^$1=//p" "$T/gho"; }
 
 BASE_SHA=$BASE_NO eq "the caller workflow is not on the base commit: introduced" "$(BASE_SHA=$BASE_NO run introduced)|$(out introduced)" "0|true"
