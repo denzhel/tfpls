@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: `actions/record` is now `tfpls record` (Go, `internal/record`; the data-branch writer is `internal/datastore`). Same event, same messages; the token now reaches git through its environment instead of the remote URL, a branch name that git could read as an option is refused, and the summary is cut at 300 characters instead of 300 bytes.
 - Maintainers: `actions/wait-for` is now `tfpls wait-for` (Go, `internal/waitfor`); same inputs and messages, and an unparsable job list is a read failure that is retried instead of being taken as "no jobs".
 
 - Maintainers: `tests/bin-install.test.sh` no longer fails about 1 run in 16 (its corrupted checksum replaced the first character by `0`, which changed nothing when the hash already began with `0`).
