@@ -78,6 +78,13 @@ a=$(pol "$heads" "$(cat "$R/.tfpls.yml")" | jq -c '[.rules[] | [.name,.policy_pa
 b=$(jq -c '[.[] | [.label,.policy_packs,.owner_paths]] | sort' <<<"$heads")
 eq "head == base: the rules equal detect's policy settings and owner paths" "$a" "$b"
 
+# ---- two patterns match one workspace and set the same key: the later one in the file wins, in approvals and in detect alike
+LATER=$'overrides:\n  "prod*": { policy_packs: [late] }\n  "*-eu": { policy_packs: [early] }\n'
+eq "approvals: the later matching override pattern in the file wins" "$(need "$(pol "$(ent . prod-eu)" "$LATER")")" "prod-eu=early"
+R2="$T/repo2"; mkdir -p "$R2/workspaces/prod-eu"; touch "$R2/workspaces/prod-eu/a.tf"; printf '%s' "$LATER" > "$R2/.tfpls.yml"; : > "$T/out2"
+(cd "$R2" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out2" CONFIG=.tfpls.yml MODE=all BASE="" NAME="" tfpls detect >/dev/null 2>&1)
+eq "detect: the same pattern wins (both agree)" "$(sed -n 's/^entries=//p' "$T/out2" | jq -r 'to_entries[0].value.policy_packs')" "early"
+
 # ---- the approval counts come from the repository's ruleset
 cnt() { RS="$1" r "$T/ok.yml" | head -1 | jq -r '[.rules[0].approvals_mode, .rules[0].approvals_required] | join(",")'; }
 echo '[{"type":"pull_request","parameters":{"required_approving_review_count":2,"dismiss_stale_reviews_on_push":true}}]' > "$T/rs2.json"

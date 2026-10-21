@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/denzhel/tfpls/internal/yamlconf"
 )
 
 type fakeGH struct{ calls [][]string }
@@ -55,12 +57,12 @@ func TestGlobAndNormDir(t *testing.T) {
 	}
 	heads := []J{{"name": "x/prod-eu", "label": "prod-eu", "dir": ".", "workspace": "prod-eu"}}
 	base := J{"overrides": J{"prod*": J{"policy_packs": []any{"p3"}}}}
-	if r := Compute(heads, base); r.Rules[0]["policy_packs"] != "p3" || r.Entries[0]["policy_packs"] != "p3" {
+	if r := Compute(heads, base, nil); r.Rules[0]["policy_packs"] != "p3" || r.Entries[0]["policy_packs"] != "p3" {
 		t.Errorf("%v", r.Rules)
 	}
 	// a pull request cannot escape a protected directory by renaming its stack
 	prot := J{"stacks": []any{J{"name": "prod", "dir": "envs/prod", "workspaces": []any{"default"}, "policy_packs": []any{"p2"}}}}
-	if r := Compute([]J{{"name": "x", "label": "alias", "dir": "envs//prod", "workspace": "default"}}, prot); r.Rules[0]["policy_packs"] != "p2" {
+	if r := Compute([]J{{"name": "x", "label": "alias", "dir": "envs//prod", "workspace": "default"}}, prot, nil); r.Rules[0]["policy_packs"] != "p2" {
 		t.Errorf("alias escaped: %v", r.Rules)
 	}
 }
@@ -95,5 +97,29 @@ func TestReviewsOnlyWriters(t *testing.T) {
 	got, ignored, err := Reviews(Env{Getenv: func(k string) string { return env[k] }, GH: gh}, "o/r", "1")
 	if err != nil || len(got) != 1 || len(ignored) != 0 || len(gh.calls) != 1 {
 		t.Errorf("%v %v %v %d", got, ignored, err, len(gh.calls))
+	}
+}
+
+// two patterns match one workspace and set the same key: the one later in the file wins (alphabetical order would pick the other)
+func TestLaterOverridePatternWins(t *testing.T) {
+	data := []byte("overrides:\n  \"prod*\": { policy_packs: [late] }\n  \"*-eu\": { policy_packs: [early] }\n")
+	cfg, err := yamlconf.Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order, err := yamlconf.KeyOrder(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	heads := []J{{"name": "x/prod-eu", "label": "prod-eu", "dir": ".", "workspace": "prod-eu"}}
+	if r := Compute(heads, cfg.(J), order); r.Rules[0]["policy_packs"] != "early" {
+		t.Errorf("document order: the later pattern (*-eu) must win, got %v", r.Rules[0]["policy_packs"])
+	}
+	// a stack's own overrides keep the top-level keys first, replacing in place
+	data = []byte("overrides:\n  \"prod*\": { policy_packs: [top] }\nstacks:\n  - name: s\n    dir: .\n    workspaces: [prod-eu]\n    overrides:\n      \"prod*\": { policy_packs: [own] }\n")
+	cfg, _ = yamlconf.Parse(data)
+	order, _ = yamlconf.KeyOrder(data)
+	if r := Compute(heads, cfg.(J), order); r.Rules[0]["policy_packs"] != "own" {
+		t.Errorf("stack override must win: %v", r.Rules[0]["policy_packs"])
 	}
 }

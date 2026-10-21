@@ -131,6 +131,7 @@ func Rules(e Env) int {
 		}
 	}
 	base := J{}
+	var order map[string][]string
 	if have {
 		cfg, err := yamlconf.Parse(raw)
 		if err != nil {
@@ -140,6 +141,9 @@ func Rules(e Env) int {
 			if m, ok := cfg.(J); ok {
 				base = m
 			}
+		}
+		if order, err = yamlconf.KeyOrder(raw); err != nil {
+			return fail("the config on the default branch is not valid YAML; merge a fix there before `/tofu apply` can check approvals.")
 		}
 		if msg, ok := e.Validate(cfg); !ok {
 			return fail("the config on the default branch has errors (" + msg + "); merge a fix there before `/tofu apply` can check approvals.")
@@ -154,7 +158,7 @@ func Rules(e Env) int {
 	if !ok {
 		return fail("could not read the pull request's workspaces.")
 	}
-	res := Compute(heads, base)
+	res := Compute(heads, base, order)
 
 	rs, ok := loadRuleset(e, repo, branch)
 	if !ok {

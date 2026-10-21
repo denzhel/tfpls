@@ -4,6 +4,7 @@ package approvals
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -89,27 +90,68 @@ type Result struct {
 	OwnerEntries []J
 }
 
+// kv is one entry of an overrides map, kept in document order (the later pattern wins when several match).
+type kv struct {
+	key string
+	val J
+}
+
+// orderedOverrides lists an overrides map in document order (keys: yamlconf.KeyOrder of that map); keys the order does
+// not know follow, sorted.
+func orderedOverrides(m J, keys []string) []kv {
+	out := []kv{}
+	seen := map[string]bool{}
+	for _, k := range append(keys, sortedKeys(m)...) {
+		if v, ok := m[k].(J); ok && !seen[k] {
+			out = append(out, kv{k, v})
+			seen[k] = true
+		}
+	}
+	return out
+}
+
+// mergeOverrides is jq's `$top + $own`: the keys of top first, a key of own replaces the value in place, new keys follow.
+func mergeOverrides(top, own []kv) []kv {
+	out := append([]kv{}, top...)
+	for _, o := range own {
+		replaced := false
+		for i := range out {
+			if out[i].key == o.key {
+				out[i].val, replaced = o.val, true
+			}
+		}
+		if !replaced {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 // Compute is policy.jq. heads are the pull request's entries, base the config of the default branch ({} when none).
-func Compute(heads []J, base J) Result {
+// order is yamlconf.KeyOrder of the config file (nil: sorted order).
+func Compute(heads []J, base J, order map[string][]string) Result {
 	defaults := obj(base["defaults"])
-	top := obj(base["overrides"])
+	top := orderedOverrides(obj(base["overrides"]), order["overrides"])
 	var stacks []J
+	var ovs [][]kv // overrides per stack, parallel to stacks
 	if raw, ok := base["stacks"].([]any); ok && base["stacks"] != nil {
-		for _, s := range raw {
+		for i, s := range raw {
 			sm := obj(s)
-			stacks = append(stacks, merge(sm, J{"overrides": merge(top, obj(alt(sm["overrides"], J{})))}))
+			stacks = append(stacks, sm)
+			own := orderedOverrides(obj(alt(sm["overrides"], J{})), order[fmt.Sprintf("stacks/%d/overrides", i)])
+			ovs = append(ovs, mergeOverrides(top, own))
 		}
 	} else {
-		stacks = []J{{"name": "terraform", "dir": ".", "workspaces_glob": "workspaces/*", "workspace_paths": []any{"workspaces/{workspace}/"}, "overrides": top}}
+		stacks = []J{{"name": "terraform", "dir": ".", "workspaces_glob": "workspaces/*", "workspace_paths": []any{"workspaces/{workspace}/"}}}
+		ovs = [][]kv{top}
 	}
 
-	rule := func(t, s J) J {
+	rule := func(t, s J, ov []kv) J {
 		w := str(alt(t["workspace"], ""))
 		o := J{}
-		ov := obj(s["overrides"])
-		for _, k := range sortedKeys(ov) {
-			if globMatch(k, w) || globMatch(k, str(alt(s["name"], ""))) {
-				o = merge(o, obj(ov[k]))
+		for _, e := range ov {
+			if globMatch(e.key, w) || globMatch(e.key, str(alt(s["name"], ""))) {
+				o = merge(o, e.val)
 			}
 		}
 		m := merge(defaults, s, o)
@@ -147,7 +189,8 @@ func Compute(heads []J, base J) Result {
 		d := normDir(t["dir"])
 		w := str(alt(t["workspace"], ""))
 		var cand []J
-		for _, s := range stacks {
+		var candOv [][]kv
+		for si, s := range stacks {
 			if normDir(s["dir"]) != d {
 				continue
 			}
@@ -165,13 +208,14 @@ func Compute(heads []J, base J) Result {
 				continue
 			}
 			cand = append(cand, s)
+			candOv = append(candOv, ovs[si])
 		}
 		if len(cand) == 0 {
-			return []J{rule(t, J{"dir": t["dir"], "overrides": top})}
+			return []J{rule(t, J{"dir": t["dir"]}, top)}
 		}
 		var out []J
-		for _, s := range cand {
-			out = append(out, rule(t, s))
+		for i, s := range cand {
+			out = append(out, rule(t, s, candOv[i]))
 		}
 		return out
 	}
