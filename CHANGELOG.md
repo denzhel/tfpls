@@ -16,6 +16,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 - Maintainers: `pr-notes` and `mark-outdated` run as `tfpls pr-notes` and `tfpls mark-outdated` (Go, `internal/prcomments`); an unreadable `names` list now marks nothing instead of marking every plan outdated.
 - Maintainers: `finish` runs as `tfpls finish webhook` and `tfpls finish store` (Go: `internal/finish`, on `internal/record` and `internal/datastore`).
 
+- Maintainers: `drift-report` runs as `tfpls drift-report` (Go, `internal/driftreport`, on `internal/datastore`).
+
 ## v0.6.0
 
 - **Fixed:** `actions/result` could not be used at all: GitHub reads `${{ toJSON(needs) }}` in an input description as an expression and refused to load the action ("Unrecognized named-value: needs"). The description is reworded, and `tests/action-descriptions.test.sh` fails on an expression in any action's input description. If you worked around this, remove the workaround.
