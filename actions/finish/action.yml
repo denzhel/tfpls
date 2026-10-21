@@ -54,7 +54,7 @@ runs:
   using: composite
   steps:
     - if: always()
-      uses: denzhel/tfpls/actions/bin@main
+      uses: denzhel/tfpls/actions/bin@v0.7.0-rc.1
     # the workspace's webhook: notify_secret is a key of TFPLS_NOTIFY_WEBHOOKS (default: SLACK_WEBHOOK); masked before the next step shows it
     - id: hook
       if: always() && inputs.notify == 'true'
@@ -65,7 +65,7 @@ runs:
         HOOKS: ${{ inputs.webhooks }}
       run: tfpls finish webhook
     - if: always() && inputs.notify == 'true'
-      uses: denzhel/tfpls/actions/notify-slack@main
+      uses: denzhel/tfpls/actions/notify-slack@v0.7.0-rc.1
       with:
         webhook: ${{ steps.hook.outputs.url }}
         format: ${{ fromJSON(inputs.entry).notify_format }}
@@ -105,7 +105,7 @@ runs:
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       run: tfpls finish store
     - if: always() && inputs.queue == 'true'
-      uses: denzhel/tfpls/actions/queue@main
+      uses: denzhel/tfpls/actions/queue@v0.7.0-rc.1
       with:
         mode: leave
         name: ${{ fromJSON(inputs.entry).name }}
