@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The weekly tool-version watch (.github/workflows/tool-versions.yml, docs/dependencies.md#tool-versions).
-# Compares the default OpenTofu and conftest versions (actions/setup/install.sh) and the actionlint version CI installs
+# Compares the default OpenTofu and conftest versions (internal/setup/setup.go) and the actionlint version CI installs
 # (.github/workflows/ci.yml) with the highest published GitHub release of each (drafts and pre-releases are skipped), and
 # keeps exactly one open issue titled "Tool versions behind": opened when a default is behind, edited when the list changes,
 # closed with a comment when every default is current. It only reads files; bumping a default stays a reviewed pull request.
@@ -66,11 +66,11 @@ check() {
   current_list="$current_list${current_list:+, }$tool $cur"
 }
 
-tofu=$(default actions/setup/install.sh 's/^TOFU_VERSION="\$\{TOFU_VERSION:-([0-9.]+)\}".*/\1/p') || exit 1
-conftest=$(default actions/setup/install.sh 's/^CONFTEST_VERSION="\$\{CONFTEST_VERSION:-([0-9.]+)\}".*/\1/p') || exit 1
+tofu=$(default internal/setup/setup.go 's/^[[:space:]]*DefaultTofu[[:space:]]*=[[:space:]]*"([0-9.]+)".*/\1/p') || exit 1
+conftest=$(default internal/setup/setup.go 's/^[[:space:]]*DefaultConftest[[:space:]]*=[[:space:]]*"([0-9.]+)".*/\1/p') || exit 1
 actionlint=$(default .github/workflows/ci.yml 's/^[[:space:]]*v=([0-9.]+); sum=[0-9a-f]{64}.*/\1/p') || exit 1
-check OpenTofu "$tofu" opentofu/opentofu '`actions/setup/install.sh` (`TOFU_VERSION`)'
-check conftest "$conftest" open-policy-agent/conftest '`actions/setup/install.sh` (`CONFTEST_VERSION`)'
+check OpenTofu "$tofu" opentofu/opentofu '`internal/setup/setup.go` (`DefaultTofu`)'
+check conftest "$conftest" open-policy-agent/conftest '`internal/setup/setup.go` (`DefaultConftest`)'
 check actionlint "$actionlint" rhysd/actionlint '`.github/workflows/ci.yml` (`v=` and its `sum=`)'
 
 # the open issue with exactly this title (the oldest, should a second one ever exist)
