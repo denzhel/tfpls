@@ -6,6 +6,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: CI runs `govulncheck` (pinned v1.1.4) on the Go module, and a negative step proves it fails on a known-vulnerable module version (`golang.org/x/text` v0.3.0).
+
 - Maintainers: `actions/approvals` is now `tfpls approvals rules|enforce|check` (Go, `internal/approvals`); same rules, messages and outputs. The "head == base" check of `tests/policy.test.sh` had been vacuous (its fixture was refused by the config check); it is fixed and asserts that it compares two workspaces. `reviews.sh` stays until `actions/codeowners` is ported.
 - Maintainers: the Go port reads YAML with `go.yaml.in/yaml/v3` through `internal/yamlconf` (what `yq -o=json` gave the scripts; checked against `yq` on every workflow, action and example file of the repository); it is the only dependency besides the standard library.
 - Maintainers: shared Go helpers for the port: `internal/ghactions` (step outputs with a delimiter that cannot be forged, environment, PATH, summary, escaped annotations, masks) and `internal/gh` (the `gh` CLI as a process); each subcommand registers itself in `cmd/tfpls/cmd_<name>.go`.
