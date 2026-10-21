@@ -12,6 +12,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: b
       shell: bash
       env:
@@ -22,12 +23,4 @@ runs:
         REPO: ${{ github.repository }}
         SERVER_URL: ${{ github.server_url }}
         WORKSPACE_DIR: ${{ github.workspace }}
-      run: |
-        set -uo pipefail
-        data=$(mktemp -d)
-        # a missing data branch is fine: the page then says nothing has been recorded yet
-        git clone --quiet --depth 1 --branch "$BRANCH" "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "$data" 2>/dev/null \
-          || echo "::notice::branch \`$BRANCH\` does not exist yet (enable audit: true and run a drift check); building an empty dashboard"
-        "${{ github.action_path }}/build.sh" "$data" "$WORKSPACE_DIR/$OUT"
-        echo "path=$OUT" >> "$GITHUB_OUTPUT"
-        rm -rf "$data"
+      run: tfpls dashboard action

@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # tfpls-dashboard <owner/repo> [out-dir]  Build the dashboard from a repository's tfpls-data branch and open it.
 # Works for private repositories (uses your `gh` login), needs no Pages and no CI run.
+# Runs `tfpls dashboard open`: the tfpls binary on the PATH, else built from this checkout with Go.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-repo=${1:?usage: tfpls-dashboard <owner/repo> [out-dir]}; out=${2:-$(mktemp -d)}
-d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
-token=$(gh auth token)
-git clone --quiet --depth 1 --branch tfpls-data "https://x-access-token:${token}@github.com/${repo}.git" "$d" 2>/dev/null \
-  || echo "no tfpls-data branch in $repo yet (enable audit: true and run a drift check); building an empty page" >&2
-REPO="$repo" "$here/actions/dashboard/build.sh" "$d" "$out"
-echo "$out/index.html"
-if command -v open >/dev/null 2>&1; then open "$out/index.html"; elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$out/index.html"; fi
+[ $# -ge 1 ] || { echo "usage: tfpls-dashboard <owner/repo> [out-dir]" >&2; exit 2; }
+if command -v tfpls >/dev/null 2>&1; then exec tfpls dashboard open "$@"; fi
+cd "$here" && exec go run ./cmd/tfpls dashboard open "$@"

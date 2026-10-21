@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# actions/finish/store.sh: the audit event lands on the data branch.
+# tfpls finish store: the audit event lands on the data branch.
 set -uo pipefail
 export TFPLS_RETRY_SLEEP=0
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-S="$here/actions/finish/store.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 git init -q --bare "$T/remote.git"
 G=(git --git-dir="$T/remote.git")
-run() { env -i PATH="$PATH" TFPLS_RETRY_SLEEP=0 TFPLS_REMOTE_URL="$T/remote.git" TFPLS_NOW=2026-10-10T10:00:00Z WORKSPACE=terraform/dev NAME=terraform/dev LABEL=dev KIND=apply STATUS=applied REPO=o/r "$@" bash "$S" >"$T/out" 2>&1; echo $?; }
+run() { env -i PATH="$PATH" TFPLS_RETRY_SLEEP=0 TFPLS_REMOTE_URL="$T/remote.git" TFPLS_NOW=2026-10-10T10:00:00Z WORKSPACE=terraform/dev NAME=terraform/dev LABEL=dev KIND=apply STATUS=applied REPO=o/r "$@" "$T/tfpls" finish store >"$T/out" 2>&1; echo $?; }
 commits() { "${G[@]}" rev-list --count tfpls-data 2>/dev/null || echo 0; }
 
 eq "audit: exit 0" "$(run AUDIT=true)" 0

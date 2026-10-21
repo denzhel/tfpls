@@ -5,8 +5,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$here" || exit 1
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-keys=$(grep -E '^def (settings|stack_keys):' actions/detect-workspaces/validate.jq | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u)
-[ -n "$keys" ] && ok "found $(wc -l <<<"$keys" | tr -d ' ') settings in validate.jq" || bad "no settings found in validate.jq"
+keys=$(grep -E '^var (settings|stackKeys) = ' internal/detect/validate.go | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u)
+[ -n "$keys" ] && ok "found $(wc -l <<<"$keys" | tr -d ' ') settings in internal/detect/validate.go" || bad "no settings found in internal/detect/validate.go"
 for k in $keys; do
   grep -q "\`$k\`" docs/reference.md && ok "reference names $k" || bad "reference does not name the setting $k"
 done

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Tests for actions/approvals: check.sh (modes), reviews.sh (who counts) and enforce.sh (per-workspace policy)
+# Tests for `tfpls approvals`: check (modes), who counts (write access) and enforce (per-workspace policy)
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-A="$here/actions/approvals"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 rev() { jq -cn --arg u "$1" --arg s "$2" --arg c "$3" --arg t "${4:-2026-10-10T10:00:00Z}" '{user:{login:$u,type:"User"},state:$s,commit_id:$c,submitted_at:$t}'; }
 mk() { printf '%s\n' "$@" | jq -s '.' > "$T/r.json"; }
-chk() { bash "$A/check.sh" "$T/r.json" HEAD "$1" "$2"; echo "rc=$?"; }
+chk() { "$T/tfpls" approvals check "$T/r.json" HEAD "$1" "$2"; echo "rc=$?"; }
 
-# ---- check.sh
+# ---- approvals check
 mk "$(rev a APPROVED HEAD)"
 eq "strict: an approval of the current commit" "$(chk strict 1 | tr '\n' ' ')" "ok rc=0 "
 eq "basic: the same" "$(chk basic 1 | tr '\n' ' ')" "ok rc=0 "
@@ -37,9 +37,9 @@ mk "$(rev a COMMENTED HEAD)"
 eq "a comment is not an approval" "$(chk basic 1 | tail -1)" "rc=1"
 mk
 eq "zero required approvals is always satisfied" "$(chk strict 0 | tr '\n' ' ')" "ok rc=0 "
-eq "bad usage exits 2" "$(bash "$A/check.sh" "$T/r.json" HEAD sloppy 1 >/dev/null 2>&1; echo $?)" 2
+eq "bad usage exits 2" "$("$T/tfpls" approvals check "$T/r.json" HEAD sloppy 1 >/dev/null 2>&1; echo $?)" 2
 
-# ---- enforce.sh: per-workspace policy with defaults
+# ---- approvals enforce: per-workspace policy with defaults
 mk "$(rev a APPROVED OLD)"
 # gh stub: collaborator permission lookups answer from STUB_PERMS ("login:perm ..."; default write; "fail" = the call fails); calls are logged
 mkdir -p "$T/bin"; cat > "$T/bin/gh" <<'STUB'
@@ -59,7 +59,7 @@ chmod +x "$T/bin/gh"
 enf() { # entries-json [env...]
   local entries=$1; shift
   env -i PATH="$T/bin:$PATH" TFPLS_DRY=1 TFPLS_REVIEWS_FILE="$T/r.json" ENTRIES="$entries" SHA=HEAD REPO=o/r PR=1 BASE_BRANCH=main \
-      "$@" bash "$A/enforce.sh" 2>&1; echo "rc=$?"
+      "$@" "$T/tfpls" approvals enforce 2>&1; echo "rc=$?"
 }
 e1='[{"name":"t/dev","approvals_mode":"","approvals_required":""}]'
 eq "defaults: strict, 1 required, old approval -> refused" "$(enf "$e1" | tail -1)" "rc=1"
@@ -104,5 +104,7 @@ mk "$(rev bob APPROVED HEAD)" "$(rev carol APPROVED HEAD)"
 eq "another approver still counts" "$(enf "$e1" STUB_PERMS="bob:write,carol:write" LAST_PUSH=true TFPLS_COMMIT_LOGINS=bob | tail -1)" "rc=0"
 
 for bad_e in '' 'not json' '[]' '{}'; do eq "no usable rules ('$bad_e') refuse instead of passing" "$(enf "$bad_e" | tail -1)" "rc=1"; done
+
+eq "action.yml installs the binary, then runs tfpls approvals rules and enforce" "$(yq -r '[.runs.steps[0].uses, .runs.steps[1].run, .runs.steps[2].run] | join("|")' "$here/actions/approvals/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls approvals rules|tfpls approvals enforce"
 
 done_tests
