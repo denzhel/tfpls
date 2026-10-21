@@ -27,7 +27,7 @@ runs:
         REPO: ${{ github.repository }}
         PR: ${{ inputs.pr_number }}
         COMMENT_ID: ${{ inputs.comment_id }}
-      run: ${{ github.action_path }}/rules.sh
+      run: tfpls approvals rules
     - if: inputs.enforce != 'false'
       shell: bash
       env:
@@ -39,4 +39,4 @@ runs:
         COMMENT_ID: ${{ inputs.comment_id }}
         GH_TOKEN: ${{ inputs.github_token }}
         REPO: ${{ github.repository }}
-      run: ${{ github.action_path }}/enforce.sh
+      run: tfpls approvals enforce

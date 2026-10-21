@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# KEPT ONLY for actions/codeowners/enforce.sh until codeowners is ported (Go: approvals.Reviews in internal/approvals).
 # The reviews of a pull request that may count: only people with write access to the repository.
 # usage: reviews.sh <repo> <pr>   -> prints a JSON array of reviews on stdout; who was left out goes to $IGNORED_OUT ("login (reason)" per line)
 # A review counts only when its author is a user (not a bot, not deleted) whose permission on the repository is admin or write
