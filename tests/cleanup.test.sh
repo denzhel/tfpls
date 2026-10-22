@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The cleanup functions of run.sh and unlock.sh (extracted from the real files) must remove everything that can hold
+# The cleanup function of unlock.sh (extracted from the real file; the tofu engine is in tests/tofu-run.test.sh) must remove everything that can hold
 # secret values from the workspace and nothing that belongs to the repository. Run: bash tests/cleanup.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -12,7 +12,8 @@ mkws() { rm -rf "$T/repo"; mkdir -p "$T/repo/stack/.terraform/providers" "$T/rep
   echo keep > "$T/repo/other/plan.json"; }
 remaining() { (cd "$T/repo/stack" && ls -A | tr '\n' ' '); }
 
-for script in actions/tofu/run.sh actions/unlock/unlock.sh; do
+# shellcheck disable=SC2043  # one script is left; the loop stays for the next one
+for script in actions/unlock/unlock.sh; do
   fn=$(sed -n '/^cleanup() {/,/^}/p' "$here/$script")
   [ -n "$fn" ] && ok "$script defines cleanup()" || { bad "$script has no cleanup()"; continue; }
   grep -q '^trap cleanup EXIT' "$here/$script" && ok "$script runs it on EXIT" || bad "$script: no EXIT trap"

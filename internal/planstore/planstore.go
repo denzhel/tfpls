@@ -1,5 +1,5 @@
 // Package planstore is the reviewed-plan store: pack and unpack a saved plan, name its artifact, find it and validate it.
-// It is the Go version of actions/tofu/plan-store.sh and keeps its file format (openssl enc -aes-256-cbc -pbkdf2 -md sha256
+// It is the Go version of the former actions/tofu/plan-store.sh and keeps its file format (openssl enc -aes-256-cbc -pbkdf2 -md sha256
 // -salt, over "<64 hex sha256 of the tgz>\n<tgz>") and its error texts word for word. The key is read from the environment
 // only and never appears on a command line.
 package planstore

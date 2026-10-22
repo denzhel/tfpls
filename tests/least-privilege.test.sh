@@ -32,16 +32,15 @@ for f in "$W"/plan.yml "$W"/apply.yml "$W"/comment-ops.yml "$W"/drift.yml "$W"/d
 done
 [ -z "$missing" ] && ok "every checkout sets persist-credentials: false" || bad "checkouts that keep the token:$missing"
 
-# tofu and conftest run without the GitHub token and the plan key (their own functions, taken from the real scripts)
+# tofu and conftest run without the GitHub token and the plan key (unlock.sh's own functions, taken from the real script)
 mkdir -p "$T/bin"
 for c in tofu conftest; do printf '#!/bin/sh\nenv | grep -E "^(GH_TOKEN|GITHUB_TOKEN|PLAN_ENCRYPTION_KEY|AWS_ACCESS_KEY_ID)=" | sort\n' > "$T/bin/$c"; chmod +x "$T/bin/$c"; done
-for script in actions/tofu/run.sh actions/unlock/unlock.sh; do
+# shellcheck disable=SC2043  # one script is left; the loop stays for the next one
+for script in actions/unlock/unlock.sh; do
   sed -n '/^tofu() /p;/^conftest() /p' "$here/$script" > "$T/fn.sh"
   got=$( . "$T/fn.sh"; PATH="$T/bin:$PATH" GH_TOKEN=secret1 GITHUB_TOKEN=secret2 PLAN_ENCRYPTION_KEY=secret3 AWS_ACCESS_KEY_ID=AKIA tofu version | tr '\n' ' ')
   eq "$script: tofu gets no GitHub token and no plan key (the cloud credentials stay)" "$got" "AWS_ACCESS_KEY_ID=AKIA "
 done
-sed -n '/^conftest() /p' "$here/actions/tofu/run.sh" > "$T/fn2.sh"
-got=$( . "$T/fn2.sh"; PATH="$T/bin:$PATH" GH_TOKEN=secret1 PLAN_ENCRYPTION_KEY=secret3 AWS_ACCESS_KEY_ID=AKIA conftest test x | tr '\n' ' ')
-eq "run.sh: conftest (policy code of the pull request) gets neither" "$got" "AWS_ACCESS_KEY_ID=AKIA "
+# the engine of the tofu action (tfpls tofu) is checked in tests/tofu-run.test.sh: tofu and conftest get neither either
 
 done_tests
