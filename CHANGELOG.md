@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: the release tooling is Go (`cmd/release`, not shipped in the binary): `tools/release.sh` is now a 3-line wrapper around it with the same arguments, output and checks, and `tools/build-release.sh` is replaced by `go run ./cmd/release build <tag> <outdir>` (used by `.github/workflows/release.yml`). The release tarballs are now byte-reproducible; only references to this repository ending exactly in `@main` are pinned.
 - Maintainers: CI runs `govulncheck` (pinned v1.1.4) on the Go module, and a negative step proves it fails on a known-vulnerable module version (`golang.org/x/text` v0.3.0). The first run found GO-2026-4602 (`os`, fixed in Go 1.25.8) in what `go 1.24` resolved to, so `go.mod` now has `toolchain go1.26.10` (CI and the release binaries are built with it; `go 1.24` stays the minimum, so a runner with an older Go can still build a branch ref).
 
 - Maintainers: `actions/approvals` is now `tfpls approvals rules|enforce|check` (Go, `internal/approvals`); same rules, messages and outputs. The "head == base" check of `tests/policy.test.sh` had been vacuous (its fixture was refused by the config check); it is fixed and asserts that it compares two workspaces. `reviews.sh` stays until `actions/codeowners` is ported.
