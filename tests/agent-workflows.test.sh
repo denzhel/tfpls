@@ -19,7 +19,8 @@ for f in "$E" "$I"; do
   y "$f" '.jobs.gate.if' | grep -q "pull_request == null" && ok "$n: pull requests are ignored" || bad "$n: PR filter missing"
   eq "$n: the model job waits for the gate" "$(y "$f" '.jobs.agent.needs')" "gate"
   y "$f" '.jobs.agent.if' | grep -q "^needs.gate.outputs.run == 'true'" && ok "$n: the model job only runs when the gate says so" || bad "$n: agent condition"
-  eq "$n: the gate is the script that is tested offline" "$(y "$f" '.jobs.gate.steps[] | select(.id == "g") | .run' | grep -c 'tools/agent-gate.sh')" "1"
+  eq "$n: the gate is the command that is tested offline, after the binary is installed" "$(y "$f" '.jobs.gate.steps[] | select(.id == "g") | .run' | grep -c '^tfpls gate ')|$(y "$f" '[.jobs.gate.steps[1].uses, .jobs.gate.steps[2].id] | join(",")')" "1|./actions/bin,g"
+  eq "$n: the report is the command that is tested offline" "$(y "$f" '.jobs.agent.steps[] | select(.name == "Report what the run used") | .run')" "tfpls agent-report"
   [ "$(y "$f" '.jobs.gate.timeout-minutes')" -le 5 ] && ok "$n: the gate job is short" || bad "$n: gate timeout"
   # the gate job is reached by more people than the agent job: it gets only what it needs (no OIDC token, no write to the code)
   eq "$n: the gate job's own permissions: read the code, write issues, read runs (the daily cap)" \
@@ -63,7 +64,7 @@ y "$I" '.jobs.gate.if' | grep -qF "startsWith(github.event.comment.body, '/imple
   && ok "implement: /implement of anyone reaches the gate, which says why it refuses" || bad "implement: command filter"
 { y "$I" '.jobs.agent.if' | grep -qF "github.event.comment.author_association == 'OWNER'" && y "$I" '.jobs.agent.if' | grep -qF "github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner"; } \
   && ok "implement: the agent job itself runs only for the owner" || bad "implement: agent job not owner-only"
-grep -qF '[ "${ACTOR_ASSOC:-NONE}" = OWNER ] || skip "/implement is for the owner"' "$here/tools/agent-gate.sh" && ok "implement: the gate refuses anyone but the owner" || bad "implement: gate owner check"
+grep -qF 'g.skip("/implement is for the owner"' "$here/internal/gate/gate.go" && ok "implement: the gate refuses anyone but the owner" || bad "implement: gate owner check"
 eq "implement: comments and a manual run start it" "$(y "$I" '.on | keys | sort | join(",")')" "issue_comment,workflow_dispatch"
 eq "elaborate: opened issues, comments and a manual run start it" "$(y "$E" '.on | keys | sort | join(",")')" "issue_comment,issues,workflow_dispatch"
 # ---- manual runs from a branch (workflow_dispatch): the owner only, with an issue number, through the same gate

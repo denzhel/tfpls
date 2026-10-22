@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: the issue agent's gate and report are now `tfpls gate elaborate|implement` and `tfpls agent-report` (Go, `internal/gate`; `tools/agent-gate.sh` and `tools/agent-report.sh` are gone); same decisions, comments, outputs and words. The gate now fails closed (a red gate job, no model run) when the issue, its comments or the list of runs cannot be read or parsed, or a cap variable is not a non-negative integer; the daily cap counts every page of runs (it saw the first 50), labels are matched exactly, and text lengths count characters. The workflows install the binary with `./actions/bin` first.
 - Maintainers: CI runs `govulncheck` (pinned v1.1.4) on the Go module, and a negative step proves it fails on a known-vulnerable module version (`golang.org/x/text` v0.3.0). The first run found GO-2026-4602 (`os`, fixed in Go 1.25.8) in what `go 1.24` resolved to, so `go.mod` now has `toolchain go1.26.10` (CI and the release binaries are built with it; `go 1.24` stays the minimum, so a runner with an older Go can still build a branch ref).
 
 - Maintainers: `actions/approvals` is now `tfpls approvals rules|enforce|check` (Go, `internal/approvals`); same rules, messages and outputs. The "head == base" check of `tests/policy.test.sh` had been vacuous (its fixture was refused by the config check); it is fixed and asserts that it compares two workspaces. `reviews.sh` stays until `actions/codeowners` is ported.

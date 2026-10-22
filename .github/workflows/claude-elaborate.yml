@@ -7,7 +7,7 @@
 #   - an issue from outside the project gets a short note and no model run; `/elaborate` of a maintainer runs the agent on it in
 #     proposal mode (one comment, never a body edit; the outsider's text is fenced data);
 #   - a skip that a person can act on (already filled in, not allowed, a cap) is said once on the issue, with what happens next.
-# Cost: most events never reach a model. The job `if:` below costs nothing, the `gate` job (tools/agent-gate.sh) decides in seconds
+# Cost: most events never reach a model. The job `if:` below costs nothing, the `gate` job (`tfpls gate`, internal/gate) decides in seconds
 # whether a run is needed (kill switch, already filled in, who, caps), and only then the `agent` job runs.
 # Switch it off without a pull request: repository variable TFPLS_AGENT_ENABLED=false. The model: TFPLS_AGENT_MODEL_ELABORATE.
 # Test a change to the agent from its branch: `gh workflow run claude-elaborate.yml --ref <branch> -f issue=<n>` (owner only).
@@ -72,6 +72,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: tfpls binary (built from the default branch checked out above)
+        uses: ./actions/bin
       - id: g
         env:
           GH_TOKEN: ${{ github.token }}
@@ -84,7 +86,7 @@ jobs:
           ENABLED: ${{ vars.TFPLS_AGENT_ENABLED }}
           MAX_ELAB_ISSUE: ${{ vars.TFPLS_AGENT_MAX_ELAB_PER_ISSUE }}
           MAX_ELAB_DAY: ${{ vars.TFPLS_AGENT_MAX_ELAB_PER_DAY }}
-        run: bash tools/agent-gate.sh elaborate
+        run: tfpls gate elaborate
       - name: Say why nothing runs and what happens next (once per reason)
         if: steps.g.outputs.comment_file != ''
         env:
@@ -128,6 +130,8 @@ jobs:
           **Next:** the owner sets the secret and comments \`/elaborate\`." || true
             echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set"; exit 1
           fi
+      - name: tfpls binary (for the report)
+        uses: ./actions/bin
       - name: Write the prepared issue (title, body and trusted comments only)
         env:
           ISSUE_MD: ${{ needs.gate.outputs.issue_md }}
@@ -175,4 +179,4 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OUTCOME: ${{ steps.claude.outcome }}
           EXEC: ${{ steps.claude.outputs.execution_file }}
-        run: bash tools/agent-report.sh
+        run: tfpls agent-report
