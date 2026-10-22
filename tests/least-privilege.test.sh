@@ -35,7 +35,8 @@ done
 # tofu and conftest run without the GitHub token and the plan key (their own functions, taken from the real scripts)
 mkdir -p "$T/bin"
 for c in tofu conftest; do printf '#!/bin/sh\nenv | grep -E "^(GH_TOKEN|GITHUB_TOKEN|PLAN_ENCRYPTION_KEY|AWS_ACCESS_KEY_ID)=" | sort\n' > "$T/bin/$c"; chmod +x "$T/bin/$c"; done
-for script in actions/tofu/run.sh actions/unlock/unlock.sh; do
+# shellcheck disable=SC2043  # one script left (tofu); unlock is Go now
+for script in actions/tofu/run.sh; do  # (`tfpls unlock` withholds the same variables: TestTofuGetsNoGitHubTokenAndNoPlanKey in internal/unlock)
   sed -n '/^tofu() /p;/^conftest() /p' "$here/$script" > "$T/fn.sh"
   got=$( . "$T/fn.sh"; PATH="$T/bin:$PATH" GH_TOKEN=secret1 GITHUB_TOKEN=secret2 PLAN_ENCRYPTION_KEY=secret3 AWS_ACCESS_KEY_ID=AKIA tofu version | tr '\n' ' ')
   eq "$script: tofu gets no GitHub token and no plan key (the cloud credentials stay)" "$got" "AWS_ACCESS_KEY_ID=AKIA "
