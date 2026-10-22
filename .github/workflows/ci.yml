@@ -67,6 +67,24 @@ jobs:
         run: go vet ./...
       - name: go test
         run: go test ./...
+      - name: install govulncheck (pinned)
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: govulncheck the module
+        run: govulncheck ./...
+      - name: govulncheck fails on a known-vulnerable module (negative case)
+        run: |
+          d=$(mktemp -d)
+          printf 'module neg\n\ngo 1.24\n\nrequire golang.org/x/text v0.3.0\n' > "$d/go.mod"
+          printf 'package main\n\nimport "golang.org/x/text/language"\n\nfunc main() { _, _, _ = language.ParseAcceptLanguage("en") }\n' > "$d/main.go"
+          cd "$d"
+          GOFLAGS=-mod=mod go mod tidy
+          if GOFLAGS=-mod=mod govulncheck ./...; then
+            echo "::error::govulncheck passed on golang.org/x/text v0.3.0 (GO-2021-0113); the gate is broken"
+            exit 1
+          fi
+          echo "govulncheck rejected the vulnerable module, as it must"
       - name: cross-build (the release targets)
         run: |
           for os in linux darwin; do
