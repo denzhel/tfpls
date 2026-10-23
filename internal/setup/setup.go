@@ -32,7 +32,7 @@ import (
 
 // The default versions (cmd/toolversions opens an issue when they fall behind the releases).
 const (
-	DefaultTofu     = "1.13.1"
+	DefaultTofu     = "1.13.2"
 	DefaultConftest = "0.71.1"
 )
 
