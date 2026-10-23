@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# actions/drift-fix: parse.sh (commands, guards) and filter.sh (drift_fix: false) with a gh stub (no network).
+# actions/drift-fix: `tfpls drift-fix parse` (commands, guards) and `filter` (drift_fix: false) with a gh stub (no network).
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-P="$here/actions/drift-fix/parse.sh"; F="$here/actions/drift-fix/filter.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; mkdir -p "$T/bin"
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
@@ -21,7 +21,7 @@ chmod +x "$T/bin/gh"
 run() { # env assignments...  -> rc, outputs in $T/out, calls in $T/log
   : > "$T/out"; : > "$T/log"
   env -i PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/out" REPO=o/r DEFAULT_BRANCH=main ACTOR=alice COMMENT_ID=7 \
-    EVENT=issue_comment ISSUE_NUMBER=9 ISSUE_TITLE="Drift: dev-eu-north-1" ISSUE_STATE=open IS_PR=false ISSUE_USER_TYPE=Bot ISSUE_LABELS='["tfpls-drift"]' "$@" bash "$P" >"$T/stdout" 2>&1
+    EVENT=issue_comment ISSUE_NUMBER=9 ISSUE_TITLE="Drift: dev-eu-north-1" ISSUE_STATE=open IS_PR=false ISSUE_USER_TYPE=Bot ISSUE_LABELS='["tfpls-drift"]' "$@" "$T/tfpls" drift-fix parse >"$T/stdout" 2>&1
   rc=$?
 }
 o() { sed -n "s/^$1=//p" "$T/out" | tail -1; }
@@ -57,9 +57,9 @@ run EVENT=workflow_dispatch ISSUE_NUMBER= BODY= IN_WORKSPACES="dev" IN_STEP=dest
 
 # filter
 E='{"dev":{"label":"dev","drift_fix":"true"},"prod":{"label":"prod","drift_fix":"false"}}'
-: > "$T/out"; : > "$T/log"; env -i PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/out" REPO=o/r ISSUE_NUMBER=9 ENTRIES="$E" bash "$F" >/dev/null 2>&1
+: > "$T/out"; : > "$T/log"; env -i PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/out" REPO=o/r ISSUE_NUMBER=9 ENTRIES="$E" "$T/tfpls" drift-fix filter >/dev/null 2>&1
 eq "filter: a workspace with drift_fix: false is dropped and the issue says why" "$(o any)|$(o matrix)|$(grep -c 'drift_fix: false' "$T/log")" 'true|{"include":[{"label":"dev"}]}|1'
-: > "$T/out"; env -i PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/out" REPO=o/r ENTRIES='{"prod":{"label":"prod","drift_fix":"false"}}' bash "$F" >/dev/null 2>&1
+: > "$T/out"; env -i PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/out" REPO=o/r ENTRIES='{"prod":{"label":"prod","drift_fix":"false"}}' "$T/tfpls" drift-fix filter >/dev/null 2>&1
 eq "filter: nothing left means nothing runs" "$(o any)" false
 
 done_tests

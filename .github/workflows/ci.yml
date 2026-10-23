@@ -100,8 +100,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # real downloads on the hosted Linux runner: the install path used by the shared workflows (the policy tests need conftest)
-      - name: install OpenTofu and conftest with the setup action
-        uses: ./actions/setup
+      # the binary of this very checkout (the setup action itself calls actions/bin@main, which is the merged code)
+      - uses: ./actions/bin
+      - name: install OpenTofu and conftest with tfpls setup
+        env:
+          INSTALL_CONFTEST: "true"
+        run: tfpls setup
       - name: installed versions match the defaults
         run: |
           tofu version | head -1

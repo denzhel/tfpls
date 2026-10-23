@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Offline tests for actions/tofu/plan-store.sh (no network, no tofu). Run: bash tests/plan-store.test.sh
+# Offline tests for the plan store (the functions of tests/plan-store-shim.sh, answered by `tfpls plan-store`; no network, no tofu). Run: bash tests/plan-store.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-. "$here/../actions/tofu/plan-store.sh"
+. "$here/plan-store-shim.sh"
 export DEFAULT_BRANCH=main
 export GITHUB_REPOSITORY_ID=100   # the id of the repository whose own plans are trusted
 pass=0; failn=0
@@ -13,6 +13,9 @@ expect_fail() { local n=$1; shift; if "$@" >/dev/null 2>&1; then bad "$n"; else 
 contains()    { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (got: $2)";; esac; }
 
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# the store is Go: build the binary that the functions of plan-store.sh call
+(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+export TFPLS_PLAN_STORE_BIN="$T/tfpls"
 mkdir "$T/w"; head -c 4096 /dev/urandom > "$T/w/tfplan"
 cat > "$T/meta.json" <<J
 {"name":"terraform/prod-us-west-1","dir":".","tofu_version":"1.10.6","tree":"abc123def456","head_sha":"deadbeefdeadbeef","targets":""}
@@ -59,7 +62,7 @@ tfpls_unpack "$plain" "$T/u7" >/dev/null 2>&1 && bad "downgrade (plain while key
 tfpls_unpack "$plain" "$T/u8" >/dev/null 2>&1; contains "downgrade message" "$TFPLS_ERR" "downgrade"
 ( unset PLAN_ENCRYPTION_KEY; tfpls_unpack "$f" "$T/u9" >/dev/null 2>&1; echo "$TFPLS_ERR" > "$T/err" ); contains "needs-key message" "$(cat "$T/err")" "PLAN_ENCRYPTION_KEY is not set"
 # secrets must not appear on a command line: the pack path passes the key only via env
-grep -q 'pass:' "$here/../actions/tofu/plan-store.sh" && bad "key passed via pass: (argv)" || ok "key never in argv (-pass env: only)"
+grep -q 'pass:' "$here/plan-store-shim.sh" "$here/../internal/planstore/planstore.go" && bad "key passed via pass: (argv)" || ok "key never in argv (-pass env: only)"
 
 # ---- meta checks
 chk() { tfpls_check_meta "$T/meta.json" "$@"; }

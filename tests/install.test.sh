@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Tests for actions/setup/install.sh against a local HTTP server that can fail on demand. No real network.
-# Run: bash tests/install.test.sh   (needs python3, curl, unzip, tar)
+# Tests for `tfpls setup` (internal/setup) against a local HTTP server that can fail on demand. No real network.
+# Run: bash tests/install.test.sh   (needs go and python3)
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-INSTALL="$here/actions/setup/install.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'kill "${SRV:-}" 2>/dev/null; rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "go build failed"; exit 1; }
 
 # ---- fixtures: fake release assets laid out like the GitHub release URLs, with real checksum files
 python3 - "$T/srv" <<'PY'
@@ -62,7 +62,7 @@ stop_server() { kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null; }
 run_install() {
   OUT=$(env -i PATH="$PATH" HOME="$T/home" GITHUB_PATH="$T/ghpath" TFPLS_TOOL_CACHE="$T/cache" TFPLS_RETRY_DELAY=0 \
       TFPLS_OS=linux TFPLS_ARCH=amd64 TOFU_VERSION=9.9.9 CONFTEST_VERSION=9.9.9 \
-      TFPLS_TOFU_BASE_URL="http://127.0.0.1:$PORT" TFPLS_CONFTEST_BASE_URL="http://127.0.0.1:$PORT/c" "$@" bash "$INSTALL" 2>&1); rc=$?
+      TFPLS_TOFU_BASE_URL="http://127.0.0.1:$PORT" TFPLS_CONFTEST_BASE_URL="http://127.0.0.1:$PORT/c" "$@" "$T/tfpls" setup 2>&1); rc=$?
 }
 fresh() { rm -rf "$T/cache" "$T/ghpath"; : > "$T/ghpath"; }
 
