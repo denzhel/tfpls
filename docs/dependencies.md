@@ -33,7 +33,7 @@ How tfpls keeps the actions it pins and the tools it installs up to date, and ho
 
 ## Tool versions
 
-The tools tfpls installs are not in any manifest, so a weekly workflow watches them. [`.github/workflows/tool-versions.yml`](../.github/workflows/tool-versions.yml) runs [`tools/tool-versions.sh`](../tools/tool-versions.sh) every Monday at 05:23 UTC, and by hand:
+The tools tfpls installs are not in any manifest, so a weekly workflow watches them. [`.github/workflows/tool-versions.yml`](../.github/workflows/tool-versions.yml) runs [`cmd/toolversions`](../cmd/toolversions) (Go, not part of the shipped binary) every Monday at 05:23 UTC, and by hand:
 
 ```bash
 gh workflow run tool-versions.yml --repo denzhel/tfpls
@@ -47,7 +47,7 @@ gh workflow run tool-versions.yml --repo denzhel/tfpls
 
 It takes the highest published version among the newest 100 releases: drafts, pre-releases and tags that are not `X.Y.Z` are skipped, and a backport of an older line released later does not count as newer. Then it keeps exactly one open issue titled **Tool versions behind** (label `dependencies`): opened when a default is behind, edited only when the list changes, closed with a comment when every default is current, and left alone (nothing done at all) when everything is current and no issue is open. When a release list or a default cannot be read, the run fails instead of reporting "current".
 
-It holds `contents: read` and `issues: write` only and never edits a file: raising a default changes what every caller downloads, so it is a reviewed pull request (the issue says which lines to change; for actionlint also its checksum). Tests: `tests/tool-versions.test.sh`, against a fake `gh`.
+It holds `contents: read` and `issues: write` only and never edits a file: raising a default changes what every caller downloads, so it is a reviewed pull request (the issue says which lines to change; for actionlint also its checksum). Tests: `tests/tool-versions.test.sh`, against a fake `gh`, and the unit tests of `internal/toolversions`.
 
 ## In your repository
 

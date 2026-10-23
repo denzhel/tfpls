@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Tests for tools/tool-versions.sh (the weekly tool-version watch) and its workflow, with a small fake GitHub:
+# Tests for cmd/toolversions (the weekly tool-version watch) and its workflow, with a small fake GitHub:
 # releases come from fixture files, the open issues live in a JSON file the fake `gh` keeps up to date between runs.
 # Run: bash tests/tool-versions.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
-S="$here/tools/tool-versions.sh"
 W="$here/.github/workflows/tool-versions.yml"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+( cd "$here" && go build -o "$T/toolversions" ./cmd/toolversions ) || { bad "go build ./cmd/toolversions"; exit 1; }
 mkdir -p "$T/bin" "$T/stub" "$T/root/internal/setup" "$T/root/.github/workflows"
 # the script reads copies of the real files, so the test follows the real defaults and their real layout
 cp "$here/internal/setup/setup.go" "$T/root/internal/setup/setup.go"
@@ -53,7 +53,7 @@ releases() {
 }
 bump() { local a b c; IFS=. read -r a b c <<<"$1"; echo "$a.$b.$((c + 1))"; }
 run() { : > "$T/summary"; TFPLS_ROOT="${ROOT:-$T/root}" REPO=o/r RUN_URL=https://github.com/o/r/actions/runs/1 GH_TOKEN=x TFPLS_RETRY_DELAY=0 \
-  GITHUB_STEP_SUMMARY="$T/summary" PATH="$T/bin:$PATH" bash "$S" > "$T/out" 2>&1; rc=$?; }
+  GITHUB_STEP_SUMMARY="$T/summary" PATH="$T/bin:$PATH" "$T/toolversions" > "$T/out" 2>&1; rc=$?; }
 calls() { grep -c "^$1" "$STUB_DIR/log"; }
 open_n() { jq length "$STUB_DIR/issues.json"; }
 body() { jq -r '.[0].body // ""' "$STUB_DIR/issues.json"; }
@@ -138,14 +138,15 @@ grep -q '::error::.*internal/setup/setup.go' "$T/out" && ok "the error names the
 
 # --- it never edits a file
 eq "no file under the checked tree changed in any run" "$(hash_root)" "$before"
-grep -nE '(^|[^&0-9])>>?[[:space:]]*"?\$(root|TFPLS_ROOT)' "$S" >/dev/null 2>&1 && bad "the script writes into the tree it checks" || ok "the script has no redirection into the tree it checks"
+grep -rnE 'os\.(WriteFile|Create|Remove|Rename|MkdirAll)' "$here/internal/toolversions/toolversions.go" >/dev/null 2>&1 && bad "the code writes files" || ok "the code writes no file (only the step summary is appended)"
 
 # --- the workflow: weekly and by hand, least privilege, runs the script
 yq '.' "$W" >/dev/null 2>&1 && ok "tool-versions.yml parses" || bad "tool-versions.yml missing or invalid"
 eq "triggers: a weekly schedule and workflow_dispatch" "$(yq -r '.on | keys | sort | join(",")' "$W" 2>/dev/null)|$(yq -r '.on.schedule | length' "$W" 2>/dev/null)" "schedule,workflow_dispatch|1"
 eq "permissions: contents read and issues write, nothing else" "$(yq -r '.permissions | to_entries | map(.key + ":" + .value) | sort | join(",")' "$W" 2>/dev/null)" "contents:read,issues:write"
 eq "no job widens them" "$(yq -r '[.jobs[] | select(has("permissions"))] | length' "$W" 2>/dev/null)" 0
-grep -q 'bash tools/tool-versions.sh' "$W" && ok "the job runs tools/tool-versions.sh" || bad "script not run"
+grep -q 'go run ./cmd/toolversions' "$W" && ok "the job runs cmd/toolversions" || bad "script not run"
 eq "the checkout keeps no token" "$(grep -c 'uses: actions/checkout@' "$W")|$(grep -c 'persist-credentials: false' "$W")" "1|1"
+eq "Go comes from go.mod (setup-go pinned to a commit)" "$(grep -cE 'uses: actions/setup-go@[0-9a-f]{40}' "$W")|$(grep -c 'go-version-file: go.mod' "$W")" "1|1"
 
 done_tests

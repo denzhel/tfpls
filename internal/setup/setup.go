@@ -30,7 +30,7 @@ import (
 	"github.com/denzhel/tfpls/internal/ghactions"
 )
 
-// The default versions (tools/tool-versions.sh opens an issue when they fall behind the releases).
+// The default versions (cmd/toolversions opens an issue when they fall behind the releases).
 const (
 	DefaultTofu     = "1.13.1"
 	DefaultConftest = "0.71.1"
