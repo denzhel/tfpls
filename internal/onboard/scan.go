@@ -410,7 +410,7 @@ func (s *state) scanTF() {
 			s.dynamo = true
 		}
 	}
-	// the OpenTofu version, read as the pipeline reads it (actions/setup/detect-version.sh): the repository root only
+	// the OpenTofu version, read as the pipeline reads it (internal/setup/detect.go): the repository root only
 	for _, f := range []string{".opentofu-version", ".tofu-version", ".terraform-version"} {
 		fi, err := os.Stat(s.abs(f))
 		if err != nil || !fi.Mode().IsRegular() {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/denzhel/tfpls/internal/unlock"
 )
 
 var (
@@ -15,8 +17,6 @@ var (
 	lockFieldR = func(name string) *regexp.Regexp { return regexp.MustCompile(`^ *` + name + `: *(.*)$`) }
 	idRe       = lockFieldR("ID")
 	whoRe      = lockFieldR("Who")
-	opRe       = lockFieldR("Operation")
-	createdRe  = lockFieldR("Created")
 )
 
 // cleanLines removes colour codes and the box-drawing characters tofu puts around its errors.
@@ -106,21 +106,12 @@ func Failure(text, label, actionRepo string) string {
 	return b.String()
 }
 
-// Lock is what a tofu "Error acquiring the state lock" message says about the holder.
-type Lock struct{ ID, Who, Op, Created string }
+// Lock is what tofu prints in the "Lock Info" block of a state lock error (the parser is the one of `tfpls unlock`).
+type Lock = unlock.Lock
 
-var lockIDRe = regexp.MustCompile(`^[0-9A-Za-z-]{8,64}$`)
-
-// ParseLock reads the lock block of a failed plan. found is false when there is no lock error; valid is false when its ID is
-// not a plausible lock ID (the other fields are still filled).
+// ParseLock reads the lock block of a failed plan, whose lines carry tofu's box characters. found is false when there is no
+// lock error; valid is false when its ID is not a plausible lock ID (the other fields are still filled).
 func ParseLock(text string) (l Lock, found, valid bool) {
-	clean := cleanLines(text)
-	if !contains(clean, "Error acquiring the state lock") {
-		return Lock{}, false, false
-	}
-	l.ID = strings.Join(strings.Fields(firstField(clean, idRe)), "")
-	l.Who = firstField(clean, whoRe)
-	l.Op = firstField(clean, opRe)
-	l.Created = firstField(clean, createdRe)
-	return l, true, lockIDRe.MatchString(l.ID)
+	l, rc := unlock.ParseLock(strings.Join(cleanLines(text), "\n"))
+	return l, rc != 1, rc == 0
 }

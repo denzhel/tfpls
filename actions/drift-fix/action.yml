@@ -28,6 +28,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: parse
       if: inputs.mode == 'parse'
       shell: bash
@@ -47,7 +48,7 @@ runs:
         IN_STEP: ${{ inputs.step }}
         REPO: ${{ github.repository }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-      run: ${{ github.action_path }}/parse.sh
+      run: tfpls drift-fix parse
     - id: filter
       if: inputs.mode == 'filter'
       shell: bash
@@ -56,4 +57,4 @@ runs:
         ENTRIES: ${{ inputs.entries }}
         ISSUE_NUMBER: ${{ github.event.issue.number }}
         REPO: ${{ github.repository }}
-      run: ${{ github.action_path }}/filter.sh
+      run: tfpls drift-fix filter
