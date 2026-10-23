@@ -44,7 +44,7 @@ jobs:
       any: ${{ steps.f.outputs.any }}
     steps:
       - id: p
-        uses: denzhel/tfpls/actions/drift-fix@main
+        uses: denzhel/tfpls/actions/drift-fix@v0.9.0-rc.1
         with:
           mode: parse
           workspaces: ${{ inputs.workspaces }}
@@ -54,13 +54,13 @@ jobs:
         with: { ref: "${{ steps.p.outputs.sha }}", persist-credentials: false }
       - id: d
         if: steps.p.outputs.ok == 'true'
-        uses: denzhel/tfpls/actions/detect-workspaces@main
+        uses: denzhel/tfpls/actions/detect-workspaces@v0.9.0-rc.1
         with:
           config: ${{ inputs.config }}
           name: ${{ steps.p.outputs.names }}
       - id: f
         if: steps.p.outputs.ok == 'true'
-        uses: denzhel/tfpls/actions/drift-fix@main
+        uses: denzhel/tfpls/actions/drift-fix@v0.9.0-rc.1
         with:
           mode: filter
           entries: ${{ steps.d.outputs.entries }}
@@ -82,7 +82,7 @@ jobs:
       group: tfpls-${{ github.repository }}-${{ fromJSON(needs.parse.outputs.entries)[matrix.label].name }}
       cancel-in-progress: false
     steps:
-      - uses: denzhel/tfpls/actions/prepare@main
+      - uses: denzhel/tfpls/actions/prepare@v0.9.0-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
           ref: ${{ needs.parse.outputs.sha }}
@@ -105,7 +105,7 @@ jobs:
           fi
           echo "number=${n:-}" >> "$GITHUB_OUTPUT"
       - id: t
-        uses: denzhel/tfpls/actions/tofu@main
+        uses: denzhel/tfpls/actions/tofu@v0.9.0-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
           targets: ${{ needs.parse.outputs.targets }}
@@ -118,7 +118,7 @@ jobs:
           plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
           allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       - if: always() && needs.parse.outputs.cmd != 'plan'
-        uses: denzhel/tfpls/actions/finish@main
+        uses: denzhel/tfpls/actions/finish@v0.9.0-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.parse.outputs.entries)[matrix.label]) }}
           label: ${{ matrix.label }}
