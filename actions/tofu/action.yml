@@ -60,6 +60,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: run
       shell: bash
       env:

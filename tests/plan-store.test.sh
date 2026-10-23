@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline tests for actions/tofu/plan-store.sh (no network, no tofu). Run: bash tests/plan-store.test.sh
+# Offline tests for the plan store (the functions of actions/tofu/plan-store.sh, answered by `tfpls plan-store`; no network, no tofu). Run: bash tests/plan-store.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$here/../actions/tofu/plan-store.sh"
@@ -13,6 +13,9 @@ expect_fail() { local n=$1; shift; if "$@" >/dev/null 2>&1; then bad "$n"; else 
 contains()    { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (got: $2)";; esac; }
 
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# the store is Go: build the binary that the functions of plan-store.sh call
+(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+export TFPLS_PLAN_STORE_BIN="$T/tfpls"
 mkdir "$T/w"; head -c 4096 /dev/urandom > "$T/w/tfplan"
 cat > "$T/meta.json" <<J
 {"name":"terraform/prod-us-west-1","dir":".","tofu_version":"1.10.6","tree":"abc123def456","head_sha":"deadbeefdeadbeef","targets":""}
