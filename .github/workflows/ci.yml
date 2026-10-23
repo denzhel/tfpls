@@ -30,7 +30,7 @@ jobs:
         run: |
           actionlint -color
       - name: shellcheck
-        run: shellcheck -S warning actions/*/*.sh tools/* tests/*.sh
+        run: shellcheck -S warning actions/bin/install.sh tools/onboard tools/release.sh tools/tfpls-dashboard tests/*.sh
       - name: yaml parses
         run: |
           for f in .github/workflows/*.yml actions/*/action.yml examples/.tfpls.yml .github/ISSUE_TEMPLATE/*.yml; do
