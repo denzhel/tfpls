@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Tests for actions/unlock/unlock.sh in sweep mode with stubbed tofu and gh (no network, no state backend).
+# Tests for `tfpls unlock` (one workspace, report mode) with stubbed tofu and gh (no network, no state backend).
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-U="$here/actions/unlock/unlock.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+U="$T/tfpls"
 mkdir -p "$T/bin" "$T/repo/dir"
 
 # tofu stub: `plan` fails with a lock error when LOCK_CREATED is set; force-unlock records the call
@@ -37,7 +38,7 @@ chmod +x "$T/bin/"*
 run() { # created sweep -> sets rc, result, detail
   : > "$T/log"; : > "$T/gho"
   LOCK_CREATED="$1" REPORT_ONLY="${2:-${REPORT_ONLY:-false}}" PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/gho" \
-    NAME=ws LABEL=ws DIR=dir WS="${WS:-}" REPO_ROOT="$T/repo" RUN_URL=u GITHUB_REPOSITORY=o/r GITHUB_RUN_ID=999 bash "$U" >"$T/out" 2>&1
+    NAME=ws LABEL=ws DIR=dir WS="${WS:-}" REPO_ROOT="$T/repo" RUN_URL=u GITHUB_REPOSITORY=o/r GITHUB_RUN_ID=999 "$U" unlock >"$T/out" 2>&1
   rc=$?; result=$(sed -n 's/^result=//p' "$T/gho" | tail -1); detail=$(sed -n 's/^detail=//p' "$T/gho" | tail -1)
 }
 ago() { date -u -v-"$1"M '+%Y-%m-%d %H:%M:%S.000 +0000 UTC' 2>/dev/null || date -u -d "$1 minutes ago" '+%Y-%m-%d %H:%M:%S.000 +0000 UTC'; }

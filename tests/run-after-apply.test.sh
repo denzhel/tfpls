@@ -9,6 +9,9 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/actions/tofu/plan-store.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin"
+# the plan store is Go: run.sh finds `tfpls` on the PATH (the action installs it), the test shell uses the same binary
+(cd "$here" && go build -o "$T/bin/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+export TFPLS_PLAN_STORE_BIN="$T/bin/tfpls"
 SHA=abcdef0123456789abcdef0123456789abcdef01
 RUN=https://github.com/o/r/actions/runs   # this run is $RUN/222; the /tofu apply run in the comments is $RUN/111
 

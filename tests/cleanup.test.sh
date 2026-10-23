@@ -12,7 +12,8 @@ mkws() { rm -rf "$T/repo"; mkdir -p "$T/repo/stack/.terraform/providers" "$T/rep
   echo keep > "$T/repo/other/plan.json"; }
 remaining() { (cd "$T/repo/stack" && ls -A | tr '\n' ' '); }
 
-for script in actions/tofu/run.sh actions/unlock/unlock.sh; do
+# shellcheck disable=SC2043  # one script left (tofu); unlock is Go now
+for script in actions/tofu/run.sh; do
   fn=$(sed -n '/^cleanup() {/,/^}/p' "$here/$script")
   [ -n "$fn" ] && ok "$script defines cleanup()" || { bad "$script has no cleanup()"; continue; }
   grep -q '^trap cleanup EXIT' "$here/$script" && ok "$script runs it on EXIT" || bad "$script: no EXIT trap"
@@ -29,7 +30,7 @@ for script in actions/tofu/run.sh actions/unlock/unlock.sh; do
 done
 
 # the composite actions also clean up when the script was killed (always-run last step)
-for a in tofu unlock; do
+for a in tofu unlock; do  # (the cleanup of `tfpls unlock` itself is tested in internal/unlock)
   [ "$(yq -r '.runs.steps[-1].if' "$here/actions/$a/action.yml")" = "always()" ] && ok "actions/$a ends with an always() cleanup step" || bad "actions/$a: last step is not always()"
 done
 
