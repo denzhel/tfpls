@@ -27,7 +27,7 @@ Other properties:
 - **Secrets in logs**: values of the credential maps, and the webhook URL a notification uses, are masked; sensitive plan values are shown as `(sensitive)` and never written to comments.
 - **Runners**: self-hosted runners keep their work directory between jobs, so the tofu action deletes plan files and `.terraform` after every run; see [runners.md](runners.md) for ephemeral and containerised options. A public repository should never use self-hosted runners for pull requests.
 - **The data branch** (`tfpls-data`: audit log, drift state, queue tickets) holds no secrets and no plan values, only workspace names, results, actors and run links. Anyone with write access can rewrite it; protect it with a branch rule if you rely on the audit log.
-- **Supply chain**: third-party actions are pinned to commit SHAs; tools are downloaded from release URLs with SHA-256 verification.
+- **Supply chain**: third-party actions are pinned to commit SHAs; tools are downloaded from release URLs with SHA-256 verification; the `tfpls` binary of a release is verified by checksum and build provenance in every job ([the tfpls binary and the toolchain](#the-tfpls-binary-and-the-toolchain)).
 - **Fixing a drift on demand**: anyone with write access can plan and apply a drifted workspace from its `Drift: <workspace>` issue or the manual task `fix`, without a pull request and without a second reviewer (a deliberate choice: the plan comment and the audit log are the record). The same credentials and policies apply; set `drift_fix: false` for workspaces that must go through a pull request ([drift.md](drift.md#fixing-a-drift-on-demand-no-pull-request)).
 - **Not covered**: a malicious change *to the OpenTofu code* is code execution on the runner during plan (providers, `external` data sources). Plan jobs use the same single role as every other job, so treat who may open same-repo pull requests as who may run code with that role ([credentials.md](credentials.md)).
 
@@ -38,6 +38,42 @@ Report vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 - Every job asks only for the token permissions it calls the API with (pull request plan jobs: read the code, write comments, assume the role; no write to the data branch). The job behind a `/tofu` comment is one job for plan, apply and unlock and holds `contents: write`; a `/tofu plan` there runs the pull request's code with the default branch's OIDC subject (`ref:refs/heads/<default>`), so a trust policy that allows that subject also lets pull request code assume the role. Checkouts do not leave the token in `.git/config`.
 - `tofu` and the policy tool run without the GitHub token and the plan encryption key, so a provider, an `external` data source or a module of a pull request does not find them in its environment. This is hygiene, **not isolation**: that code runs as the same user as the rest of the job and could still read the runner's process files or its work directory. The cloud credentials are in the environment by necessity. The controls that hold are the trust policy of the role, separate plan and apply roles with an Environment, and ephemeral runners ([credentials.md](credentials.md), [runners.md](runners.md)).
 - **Secrets** reach a job only by name. No workflow looks a secret up by a computed name (`secrets[...]`) or passes the whole `secrets` context (`toJSON(secrets)`), which would hand the job every secret of the caller (with `secrets: inherit`: every repository and organisation secret); `tests/secrets-exposure.test.sh` checks it, and so does CodeQL (`actions/excessive-secrets-exposure`). The jobs that run tofu get `TFPLS_ENV_JSON` and, where plans are saved or applied, `PLAN_ENCRYPTION_KEY`; the jobs that notify get `SLACK_WEBHOOK` and `TFPLS_NOTIFY_WEBHOOKS` ([notifications.md](notifications.md)). GitHub sends the secrets per job, not per step: the job behind a `/tofu` comment also runs `/tofu plan`, so pull request code there could read the webhook URLs and post to those channels.
+
+## The tfpls binary and the toolchain
+
+The logic of the workflows is one Go program, `tfpls` (standard library plus one YAML parser; no CGO). Every job that runs it puts it on the `PATH` first with the action `denzhel/tfpls/actions/bin`. Where the binary comes from depends on the ref the caller uses:
+
+| Caller uses | The binary is | Go that builds it |
+|---|---|---|
+| a release tag (`@v0.8.0`, or `@v0`, which is a tag) | the release asset, downloaded, verified and cached | the toolchain pinned in `go.mod` (`toolchain` line), on the release runner |
+| `@main` or a branch | built from the source of the action's own checkout (about 6 to 9 seconds; the log says so) | the Go already on the runner (`GOTOOLCHAIN=local`, so nothing is downloaded); `go 1.24` in `go.mod` is the minimum |
+
+**How a release binary is built.** Pushing a release tag starts [`release.yml`](../.github/workflows/release.yml), which runs `go run ./cmd/release build <tag> dist` with `actions/setup-go` and the version of `go.mod`. It builds `linux` and `darwin` for `amd64` and `arm64` with `CGO_ENABLED=0 -trimpath`, the tag stamped in, writes `SHA256SUMS`, and signs a GitHub build provenance attestation for the four tarballs and `SHA256SUMS` (Sigstore, keyless, from the workflow's OIDC identity). The workflow holds no secret. The same inputs give the same bytes, so a release can also be rebuilt and compared.
+
+**How a job verifies it.** On a release ref, `actions/bin` downloads `tfpls_<os>_<arch>.tar.gz` and `SHA256SUMS` of that exact tag (the tag is written into `actions/bin/VERSION` by the release commit), checks the SHA-256, and runs `gh attestation verify --repo <repo> --signer-workflow <repo>/.github/workflows/release.yml`. A mismatch or a failed provenance check stops the job. Only when `gh` or a token is missing is the checksum alone checked, and the log warns. The checksum shows the file is the one that was published; the attestation shows that this repository's release workflow built it from the tagged commit.
+
+**Verify a release by hand.** With the GitHub CLI (`gh auth login` done), for example `v0.8.0` on Linux amd64 (use your own tag, `darwin` or `arm64` as needed):
+
+```bash
+tag=v0.8.0
+gh release download "$tag" --repo denzhel/tfpls --pattern 'tfpls_linux_amd64.tar.gz' --pattern SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing          # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
+gh attestation verify tfpls_linux_amd64.tar.gz --repo denzhel/tfpls \
+  --signer-workflow denzhel/tfpls/.github/workflows/release.yml
+tar -xzf tfpls_linux_amd64.tar.gz && ./tfpls version
+go version -m ./tfpls                              # the Go version it was built with, the module and its dependency
+```
+
+To rebuild it and compare (needs a clone and Go; Go fetches the toolchain of `go.mod` itself):
+
+```bash
+git clone --branch "$tag" https://github.com/denzhel/tfpls && cd tfpls
+go run ./cmd/release build "$tag" /tmp/dist && cat /tmp/dist/SHA256SUMS     # compare with the SHA256SUMS of the release
+```
+
+The sums match when your Go is the pinned one; a different Go version gives different bytes.
+
+**Vulnerabilities in the toolchain and the module.** CI runs `govulncheck` (pinned to a version, installed with `go install`) over `./...` on every pull request and push. It reports only vulnerabilities in code the program can reach, in the standard library of the Go that CI uses as well as in the dependencies. Its first run found a standard library advisory fixed in a newer Go, which is why `go.mod` pins `toolchain go1.26.10`: CI and the release binaries are built with it. A negative step proves the gate works: it builds a tiny module that depends on `golang.org/x/text` v0.3.0 (GO-2021-0113) and fails the job if `govulncheck` passes on it. Dependabot's `gomod` entry keeps the module's dependency current ([dependencies](dependencies.md)); raising the `toolchain` line is a normal reviewed pull request, after which the next release uses it. A branch ref is built with the runner's Go, which may be older than the pinned one: use a release tag where that matters.
 
 ## Automated scanning
 

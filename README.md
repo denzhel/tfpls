@@ -37,6 +37,7 @@
 As safe as your cloud credentials, and tfpls will not pretend otherwise. The full picture: [security model](docs/security-model.md); found a vulnerability? [SECURITY.md](SECURITY.md).
 - **The cloud credentials are the only hard boundary.** Plans run the pull request's code, so anyone who can push a branch runs code with the plan role. For a real boundary, give apply its own role ([credentials](docs/credentials.md)).
 - **Approvals and saved plans are process controls on top.** An apply needs the approvals your repository asks for, from people with write access; the saved plan is bound to the commit and single-use.
+- **The program is verified.** Jobs run one Go binary, `tfpls`; on a release its checksum and build provenance are checked first, and you can check it by hand ([how](docs/security-model.md#the-tfpls-binary-and-the-toolchain)).
 - **Public repositories** show comments and logs to everyone; saved plans are stored only encrypted, and fork pull requests are never planned and get no credentials. Never use self-hosted runners there.
 
 ## Where to go next
