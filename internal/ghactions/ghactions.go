@@ -110,6 +110,12 @@ func (r *Runner) Error(msg string)   { r.command("error", msg) }
 func (r *Runner) Warning(msg string) { r.command("warning", msg) }
 func (r *Runner) Notice(msg string)  { r.command("notice", msg) }
 
+// NoticeTitle is Notice with a title (property values escape : and , as well).
+func (r *Runner) NoticeTitle(title, msg string) {
+	t := strings.NewReplacer(":", "%3A", ",", "%2C").Replace(escape(title))
+	fmt.Fprintf(r.Stdout, "::notice title=%s::%s\n", t, escape(msg))
+}
+
 // Mask hides every line of a secret in the logs of the following steps. Empty lines are skipped (an empty mask would hide nothing
 // and some runners reject it).
 func (r *Runner) Mask(secret string) {

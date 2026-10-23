@@ -49,69 +49,10 @@ jobs:
       COMMENT_ID: ${{ github.event.comment.id }}
       REQUIRE_UTD: ${{ inputs.require_up_to_date }}
     steps:
+      - uses: denzhel/tfpls/actions/bin@main
       - id: p
         shell: bash
-        run: |
-          set -euo pipefail
-          set -f   # comment words are never glob-expanded against the runner directory
-          # tell the user why a command was rejected: reply on the PR (errors used to be visible only in the run log)
-          fail() {
-            echo "::error::$1"
-            local shown=${BODY//\`/}; shown=$(head -n1 <<<"$shown" | cut -c1-120)
-            # user-controlled text goes into a markdown comment: drop backticks, escape < and > (GitHub would hide <tags>)
-            local msg=${1//\`/}; msg=$(printf '%s' "$msg" | sed -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "❌ \`$shown\`: $msg" >/dev/null 2>&1 || true
-            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=confused >/dev/null 2>&1 || true
-            exit 1
-          }
-          perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
-          [[ "$perm" == admin || "$perm" == write || "$perm" == maintain ]] || { fail "$ACTOR lacks write access"; }
-          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes >/dev/null || true
-
-          pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")
-          [ "$(jq -r .state <<<"$pr")" = open ] || { fail "this pull request is not open"; }
-          [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$GITHUB_REPOSITORY" ] || { fail "fork PRs are not supported"; }
-          sha=$(jq -r .head.sha <<<"$pr"); base=$(jq -r .base.ref <<<"$pr")
-
-          read -r _ cmd rest <<<"$(head -n1 <<<"$BODY" | tr -d '\r')"
-          [[ "$cmd" == plan || "$cmd" == apply || "$cmd" == unlock ]] || { fail "unknown command: $cmd"; }
-          names=""; targets=""; now=false
-          for tok in $rest; do
-            if [[ "$tok" == --now ]]; then now=true
-            elif [[ "$tok" == -target=* ]]; then targets+="${tok#-target=} "
-            elif [[ "$tok" =~ ^[A-Za-z0-9_./*?-]+$ && "$tok" != -* ]]; then names+="$tok "
-            else fail "unexpected argument: $tok"; fi
-          done
-          names="${names% }"
-          # --now: a repository admin applies without the approvals the repository's rules ask for (night, emergency). Everything else still holds.
-          if [ "$now" = true ]; then
-            [ "$cmd" = apply ] || { fail "--now only goes with /tofu apply"; }
-            [ "$perm" = admin ] || { fail "only repository admins can use --now (you have $perm access)"; }
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "⚡ **\`--now\`** used by @$ACTOR: the approvals the repository asks for are skipped for this apply. The reviewed plan, the policies and the up-to-date check still apply. Someone should review this afterwards." >/dev/null 2>&1 || true
-          fi
-          if [ -n "$targets" ]; then
-            if [ -z "$names" ] || [[ "$names" == *" "* || "$names" == *"*"* || "$names" == all ]]; then
-              fail "-target requires exactly one workspace (no globs/all)"
-            fi
-          fi
-          if [ "$cmd" = unlock ]; then
-            if [ -n "$targets" ] || [ -z "$names" ] || [[ "$names" == *" "* || "$names" == *"*"* || "$names" == *"?"* || "$names" == all ]]; then
-              fail "usage: /tofu unlock <workspace> (exactly one, no globs)"
-            fi
-          fi
-          if [ "$cmd" = apply ] && [ -z "$names" ]; then
-            fail "apply needs explicit workspace(s): /tofu apply <workspace…|glob|all>"
-          fi
-
-          if [ "$cmd" = apply ]; then
-            # approvals (enabled / mode / required, per workspace) are checked after the workspaces are known: actions/approvals
-            if [ "$REQUIRE_UTD" = true ]; then
-              behind=$(gh api "repos/$GITHUB_REPOSITORY/compare/$base...$sha" --jq .behind_by)
-              [ "$behind" = 0 ] || { fail "branch is $behind commits behind $base; update it first"; }
-            fi
-          fi
-          { echo "cmd=$cmd"; echo "now=$now"; echo "targets=${targets% }"; echo "sha=$sha"; echo "names=$names"; echo "base=$(jq -r .base.sha <<<"$pr")"; echo "base_ref=$(jq -r .base.ref <<<"$pr")"; } >> "$GITHUB_OUTPUT"
-
+        run: tfpls comment parse
       # /tofu unlock runs tofu init and plan with the apply role, so it never runs code of the pull request: it uses the default branch
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -159,15 +100,7 @@ jobs:
           COMMENT_ID: ${{ github.event.comment.id }}
           NAMES: ${{ steps.p.outputs.names }}
           CMD: ${{ steps.p.outputs.cmd }}
-        run: |
-          if [ -n "$NAMES" ]; then
-            msg="No workspace matches \`$NAMES\`. Check the spelling; workspaces are the names in the PR plan comments and in the config file."
-          else
-            msg="This pull request changes no workspace, so there is nothing to $CMD. Name a workspace, for example \`/tofu $CMD <workspace>\`."
-          fi
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "ℹ️ $msg" >/dev/null || true
-          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=confused >/dev/null || true
-
+        run: tfpls comment nomatch
   # One job for /tofu plan, apply and unlock, so that no sibling jobs are left "skipped" on the run page.
   #   plan   -> no environment, saves the reviewed plan
   #   apply  -> (+ apply_environment), applies ONLY the reviewed plan
