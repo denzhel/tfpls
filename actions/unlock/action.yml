@@ -32,6 +32,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: u
       shell: bash
       env:
@@ -50,7 +51,7 @@ runs:
         REPO: ${{ github.repository }}
         ACTOR: ${{ github.actor }}
         TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
-      run: if [ -n "$ENTRIES" ]; then ${{ github.action_path }}/sweep.sh; else ${{ github.action_path }}/unlock.sh; fi
+      run: tfpls unlock
     - name: Remove tofu working files from the runner workspace
       if: always()
       shell: bash

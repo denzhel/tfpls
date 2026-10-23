@@ -13,6 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - shell: bash
       env:
         MODE: ${{ inputs.mode }}
@@ -27,4 +28,4 @@ runs:
         RUN_ID: ${{ github.run_id }}
         RUN_ATTEMPT: ${{ github.run_attempt }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: ${{ github.action_path }}/queue.sh
+      run: tfpls queue
