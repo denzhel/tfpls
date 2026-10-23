@@ -109,3 +109,16 @@ jobs:
           conftest --version | head -1 | grep -q "0.71.1"
       - name: offline tests
         run: bash tests/run-all.sh
+
+  # the real binary with real OpenTofu (installed by `tfpls setup`), a local backend and terraform_data resources: no cloud, no
+  # secrets, so it runs on pull requests from forks too; an OpenTofu bump that breaks plan/apply fails here
+  engine-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: engine end-to-end tests
+        run: go test -count=1 -v -tags e2e ./internal/e2e/...
