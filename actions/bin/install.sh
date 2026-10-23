@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Put `tfpls` on the PATH of the job.
-#   VERSION next to this file is `dev` on main and branches, and the exact tag (vX.Y.Z[-rc.N]) in a release (tools/release.sh).
+#   VERSION next to this file is `dev` on main and branches, and the exact tag (vX.Y.Z[-rc.N]) in a release (tools/release.sh, cmd/release).
 #   A tag: download tfpls_<os>_<arch>.tar.gz of that release, check it against SHA256SUMS and its build provenance, cache it.
 #   dev:   build from the source of this very checkout (the code of the ref that is being run), with the runner's Go.
 # Env (tests): TFPLS_RELEASE_BASE, TFPLS_TOOL_CACHE, TFPLS_RETRY_DELAY, TFPLS_OS, TFPLS_ARCH, TFPLS_VERSION_FILE.

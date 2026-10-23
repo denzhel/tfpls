@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# tools/build-release.sh: the four release binaries, their tarballs, SHA256SUMS and the release notes. Builds into a temp dir with
+# cmd/release build: the four release binaries, their tarballs, SHA256SUMS and the release notes. Builds into a temp dir with
 # a fake tag; nothing is published. Run: bash tests/build-release.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
 cd "$here" || exit 1
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-S=tools/build-release.sh
+R=$T/release
 tag=v9.9.9-test.1
 
 if ! command -v go >/dev/null 2>&1; then echo "skip: go is not installed"; exit 0; fi
-[ -f "$S" ] && ok "tools/build-release.sh exists" || { bad "tools/build-release.sh is missing"; done_tests; exit; }
+go build -o "$R" ./cmd/release && ok "cmd/release builds" || { bad "cmd/release does not build"; done_tests; exit; }
 
-out=$(bash "$S" "$tag" "$T/dist" 2>&1); rc=$?
+out=$("$R" build "$tag" "$T/dist" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "the build succeeds" || { bad "build failed ($rc): $out"; done_tests; exit; }
 
 want=$(printf 'SHA256SUMS\ntfpls_darwin_amd64.tar.gz\ntfpls_darwin_arm64.tar.gz\ntfpls_linux_amd64.tar.gz\ntfpls_linux_arm64.tar.gz\n')
@@ -43,14 +43,14 @@ if ( cd "$T/bad" && chk >/dev/null 2>&1 ); then bad "a changed tarball still ver
 
 # release notes: the CHANGELOG section of the version, else a one-line note
 printf '# Changelog\n\n## Unreleased\n\n- next\n\n## v1.2.3\n\n- first line\n- second line\n\n## v1.2.2\n\n- old\n' > "$T/CHANGELOG.md"
-TFPLS_CHANGELOG="$T/CHANGELOG.md" bash "$S" v1.2.3 "$T/n1" >/dev/null 2>&1
+TFPLS_CHANGELOG="$T/CHANGELOG.md" "$R" build v1.2.3 "$T/n1" >/dev/null 2>&1
 eq "notes are the CHANGELOG section of the version" "$(cat "$T/n1/RELEASE_NOTES.md" 2>/dev/null)" "$(printf -- '- first line\n- second line')"
-TFPLS_CHANGELOG="$T/CHANGELOG.md" bash "$S" v1.2.4-rc.1 "$T/n2" >/dev/null 2>&1
+TFPLS_CHANGELOG="$T/CHANGELOG.md" "$R" build v1.2.4-rc.1 "$T/n2" >/dev/null 2>&1
 eq "no section: a one-line note" "$(wc -l < "$T/n2/RELEASE_NOTES.md" | tr -d ' ')" 1
 if grep -q 'v1.2.4-rc.1' "$T/n2/RELEASE_NOTES.md"; then ok "the one-line note names the version"; else bad "the fallback note does not name the version"; fi
 
 # bad input
-if bash "$S" "1.2.3" "$T/n3" >/dev/null 2>&1; then bad "a tag without v is accepted"; else ok "a tag without the v prefix is refused"; fi
-if bash "$S" >/dev/null 2>&1; then bad "no arguments accepted"; else ok "no arguments are refused"; fi
+if "$R" build "1.2.3" "$T/n3" >/dev/null 2>&1; then bad "a tag without v is accepted"; else ok "a tag without the v prefix is refused"; fi
+if "$R" build >/dev/null 2>&1; then bad "no arguments accepted"; else ok "no arguments are refused"; fi
 
 done_tests

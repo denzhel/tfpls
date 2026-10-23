@@ -61,7 +61,7 @@ What it does: it creates a commit that is **not on `main`** in which every `OWNE
 
 ### The binary assets
 
-Pushing a release or pre-release tag (`v*`) starts [`.github/workflows/release.yml`](../.github/workflows/release.yml). It runs `tools/build-release.sh`, which builds `tfpls` for linux and darwin on amd64 and arm64 (`CGO_ENABLED=0`, `-trimpath`, the tag stamped in), signs a build provenance attestation, and creates or updates the GitHub Release of the tag (a pre-release when the tag has a hyphen) with these assets and the CHANGELOG section of the version as notes:
+Pushing a release or pre-release tag (`v*`) starts [`.github/workflows/release.yml`](../.github/workflows/release.yml). It runs `go run ./cmd/release build`, which builds `tfpls` for linux and darwin on amd64 and arm64 (`CGO_ENABLED=0`, `-trimpath`, the tag stamped in), signs a build provenance attestation, and creates or updates the GitHub Release of the tag (a pre-release when the tag has a hyphen) with these assets and the CHANGELOG section of the version as notes:
 
 - `tfpls_linux_amd64.tar.gz`, `tfpls_linux_arm64.tar.gz`, `tfpls_darwin_amd64.tar.gz`, `tfpls_darwin_arm64.tar.gz`: each holds the single file `tfpls`
 - `SHA256SUMS`: `<sha256>  <name>` for the four tarballs
