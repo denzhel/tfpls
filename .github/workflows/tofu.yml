@@ -34,7 +34,7 @@ on:
 jobs:
   plan:
     if: github.event_name == 'pull_request'
-    uses: denzhel/tfpls/.github/workflows/plan.yml@main
+    uses: denzhel/tfpls/.github/workflows/plan.yml@v0.9.1-rc.1
     with:
       allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
@@ -45,7 +45,7 @@ jobs:
 
   comment:
     if: github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.pull_request
-    uses: denzhel/tfpls/.github/workflows/comment-ops.yml@main
+    uses: denzhel/tfpls/.github/workflows/comment-ops.yml@v0.9.1-rc.1
     with:
       allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       require_up_to_date: ${{ inputs.require_up_to_date }}
@@ -62,7 +62,7 @@ jobs:
   apply:
     # only the default branch applies: a caller with `push:` and no branch filter must not apply from a feature branch
     if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    uses: denzhel/tfpls/.github/workflows/apply.yml@main
+    uses: denzhel/tfpls/.github/workflows/apply.yml@v0.9.1-rc.1
     with:
       max_parallel: ${{ inputs.max_parallel }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
@@ -79,7 +79,7 @@ jobs:
     if: >-
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.task == '' || github.event.inputs.task == null || github.event.inputs.task == 'drift'))
-    uses: denzhel/tfpls/.github/workflows/drift.yml@main
+    uses: denzhel/tfpls/.github/workflows/drift.yml@v0.9.1-rc.1
     with:
       max_parallel: ${{ inputs.max_parallel }}
       timeout_minutes: ${{ inputs.timeout_minutes }}
@@ -94,7 +94,7 @@ jobs:
   # only on request: nothing releases a state lock by itself (the schedule never runs this job)
   locks:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'locks'
-    uses: denzhel/tfpls/.github/workflows/locks.yml@main
+    uses: denzhel/tfpls/.github/workflows/locks.yml@v0.9.1-rc.1
     with:
       timeout_minutes: ${{ inputs.timeout_minutes }}
       runs_on: ${{ inputs.runs_on }}
@@ -110,7 +110,7 @@ jobs:
     if: >-
       !cancelled() && (github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.task == '' || github.event.inputs.task == null || github.event.inputs.task == 'dashboard')))
-    uses: denzhel/tfpls/.github/workflows/dashboard.yml@main
+    uses: denzhel/tfpls/.github/workflows/dashboard.yml@v0.9.1-rc.1
     with:
       runs_on: ${{ inputs.runs_on }}
       commit_page: true
@@ -121,7 +121,7 @@ jobs:
     if: >-
       (github.event_name == 'issue_comment' && github.event.action == 'created' && !github.event.issue.pull_request) ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.task == 'fix')
-    uses: denzhel/tfpls/.github/workflows/drift-fix.yml@main
+    uses: denzhel/tfpls/.github/workflows/drift-fix.yml@v0.9.1-rc.1
     with:
       allow_unencrypted_plans: ${{ inputs.allow_unencrypted_plans }}
       max_parallel: ${{ inputs.max_parallel }}

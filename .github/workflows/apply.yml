@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false }
       # the PR this commit was merged from: its head SHA keys the reviewed plan and its number gets the result comment (both empty for direct pushes)
-      - uses: denzhel/tfpls/actions/bin@main
+      - uses: denzhel/tfpls/actions/bin@v0.9.1-rc.1
       - id: pr
         shell: bash
         env:
@@ -45,7 +45,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: tfpls glue merged-pr
       - id: d
-        uses: denzhel/tfpls/actions/detect-workspaces@main
+        uses: denzhel/tfpls/actions/detect-workspaces@v0.9.1-rc.1
         with:
           config: ${{ inputs.config }}
           mode: changed
@@ -69,25 +69,25 @@ jobs:
       cancel-in-progress: false
     steps:
       - if: inputs.queue
-        uses: denzhel/tfpls/actions/queue@main
+        uses: denzhel/tfpls/actions/queue@v0.9.1-rc.1
         with:
           mode: enter
           name: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}
           label: ${{ matrix.label }}
           timeout_minutes: ${{ inputs.timeout_minutes }}
       # `after:` in the config: wait for the listed workspaces of this run and stop if one of them failed
-      - uses: denzhel/tfpls/actions/wait-for@main
+      - uses: denzhel/tfpls/actions/wait-for@v0.9.1-rc.1
         with:
           jobs: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].wait_for }}
           timeout_minutes: ${{ inputs.timeout_minutes }}
-      - uses: denzhel/tfpls/actions/prepare@main
+      - uses: denzhel/tfpls/actions/prepare@v0.9.1-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           tofu_version: ${{ inputs.tofu_version }}
           role_arn: ${{ vars.TFPLS_ROLE_ARN }}
           json: ${{ secrets.TFPLS_ENV_JSON }}
       - id: t
-        uses: denzhel/tfpls/actions/tofu@main
+        uses: denzhel/tfpls/actions/tofu@v0.9.1-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           apply: auto
@@ -97,7 +97,7 @@ jobs:
           plan_mode: ${{ fromJSON(needs.detect.outputs.entries)[matrix.label].require_reviewed_plan == 'true' && 'reviewed_only' || 'reviewed' }}
           plan_encryption_key: ${{ secrets.PLAN_ENCRYPTION_KEY }}
       - if: always()
-        uses: denzhel/tfpls/actions/finish@main
+        uses: denzhel/tfpls/actions/finish@v0.9.1-rc.1
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           label: ${{ matrix.label }}

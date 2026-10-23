@@ -13,7 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: denzhel/tfpls/actions/bin@main
+    - uses: denzhel/tfpls/actions/bin@v0.9.1-rc.1
     - name: Install OpenTofu and conftest
       shell: bash
       env:
