@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Tests for the OIDC path of actions/env/export.sh against fake GitHub-OIDC and STS servers (no cloud, no network).
+# Tests for the OIDC path of `tfpls env` against fake GitHub-OIDC and STS servers (no cloud, no network).
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-E="$here/actions/env/export.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'kill ${SRV:-} 2>/dev/null; rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+E="$T/tfpls"
 PORT=$((20000 + RANDOM % 20000))
 cat > "$T/srv.py" <<'PY'
 import http.server, sys, urllib.parse, json
@@ -40,7 +41,7 @@ for _ in $(seq 1 30); do curl -s "http://127.0.0.1:$PORT/token?x=1" >/dev/null 2
 run() { # env... ; sets out, rc ; $T/env = GITHUB_ENV
   : > "$T/env"; : > "$T/gho"
   out=$(env -i PATH="$PATH" GITHUB_ENV="$T/env" GITHUB_OUTPUT="$T/gho" GITHUB_STEP_SUMMARY=/dev/null \
-    ACTIONS_ID_TOKEN_REQUEST_URL="http://127.0.0.1:$PORT/token?api=1" ACTIONS_ID_TOKEN_REQUEST_TOKEN=req-token GITHUB_RUN_ID=77 "$@" bash "$E" 2>&1); rc=$?
+    ACTIONS_ID_TOKEN_REQUEST_URL="http://127.0.0.1:$PORT/token?api=1" ACTIONS_ID_TOKEN_REQUEST_TOKEN=req-token GITHUB_RUN_ID=77 "$@" "$E" env 2>&1); rc=$?
 }
 envval() { awk -v k="$1" '$0 ~ "^"k"<<" {getline v; print v; exit}' "$T/env"; }
 ROLE=arn:aws:iam::123456789012:role/tfpls-role
@@ -85,14 +86,14 @@ STUB
 chmod +x "$T/bin/gh"; : > "$T/ghlog"; : > "$T/ghbody"
 out=$(env -i PATH="$T/bin:$PATH" STUB_LOG="$T/ghlog" STUB_BODY="$T/ghbody" GITHUB_ENV="$T/env" GITHUB_OUTPUT="$T/gho" GITHUB_STEP_SUMMARY=/dev/null GITHUB_REPOSITORY=o/r \
   ACTIONS_ID_TOKEN_REQUEST_URL="http://127.0.0.1:$PORT/jwt?api=1" ACTIONS_ID_TOKEN_REQUEST_TOKEN=req-token GITHUB_RUN_ID=78 \
-  JSON="$JSON" ROLE_ARN="arn:aws:iam::123456789012:role/denied" REPORT_PR=7 GH_TOKEN=x bash "$E" 2>&1); rc=$?
+  JSON="$JSON" ROLE_ARN="arn:aws:iam::123456789012:role/denied" REPORT_PR=7 GH_TOKEN=x "$E" env 2>&1); rc=$?
 eq "a refused role still fails the job" "$rc" 1
 body=$(cat "$T/ghbody")
 case "$body" in *"AWS refused the role"*"AccessDenied"*"repo:acme@1/infra@2:pull_request"*) ok "the pull request gets one comment with the token subject and the error code";; *) bad "comment: $body";; esac
 case "$body" in *123456789012*|*"arn:aws"*|*"Not authorized to perform"*) bad "the comment leaks the account id, ARN or AWS's message: $body";; *) ok "the comment has no account id, no role ARN and no AWS message";; esac
 case "$body" in *"<!-- tfpls:credentials -->"*) ok "it carries its own marker (updated, not duplicated)";; *) bad "no marker";; esac
 : > "$T/ghbody"; env -i PATH="$T/bin:$PATH" STUB_LOG="$T/ghlog" STUB_BODY="$T/ghbody" GITHUB_ENV="$T/env" GITHUB_OUTPUT="$T/gho" GITHUB_STEP_SUMMARY=/dev/null GITHUB_REPOSITORY=o/r \
-  ACTIONS_ID_TOKEN_REQUEST_URL="http://127.0.0.1:$PORT/jwt?api=1" ACTIONS_ID_TOKEN_REQUEST_TOKEN=req-token GITHUB_RUN_ID=79 JSON="$JSON" ROLE_ARN="arn:aws:iam::123456789012:role/denied" GH_TOKEN=x bash "$E" >/dev/null 2>&1
+  ACTIONS_ID_TOKEN_REQUEST_URL="http://127.0.0.1:$PORT/jwt?api=1" ACTIONS_ID_TOKEN_REQUEST_TOKEN=req-token GITHUB_RUN_ID=79 JSON="$JSON" ROLE_ARN="arn:aws:iam::123456789012:role/denied" GH_TOKEN=x "$E" env >/dev/null 2>&1
 eq "without REPORT_PR nothing is posted" "$(wc -c < "$T/ghbody" | tr -d ' ')" 0
 
 done_tests
