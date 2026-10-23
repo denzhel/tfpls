@@ -81,7 +81,7 @@ The checksum proves the file is the one that was published; the attestation prov
 
 Bad release: `git push --delete origin v0.1.0`, then move the major tag back to the previous release: `git tag -f -a v0 -m v0 v0.1.9 && git push --force origin refs/tags/v0`.
 
-Third-party actions are pinned by SHA (`tests/pinning.test.sh` fails CI otherwise); updating them is a normal pull request.
+Third-party actions are pinned by SHA (`go test ./internal/repocheck` fails CI otherwise); updating them is a normal pull request.
 
 ## The binary inside a job
 

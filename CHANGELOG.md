@@ -6,6 +6,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: the checks that only read repository files (pins, timeouts, secrets exposure, the entry workflow, dependabot, docs links, defaults and anchors, README opening, TF_ names) moved from 13 `tests/*.test.sh` files with `yq`/`grep` to Go tests in `internal/repocheck`, run by `go test ./...`; same assertions, plus fixtures that prove each guard can fail. `tests/bash32.test.sh` stays.
+
 ## v0.9.1
 
 - Maintainers: `tests/run-all.sh` builds `cmd/tfpls`, `cmd/release` and `cmd/toolversions` once and the test files copy them (`build_bin` in `tests/lib.sh`) instead of each running `go build`; a file run by hand still builds itself.
