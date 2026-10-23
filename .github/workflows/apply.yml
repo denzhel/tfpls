@@ -37,17 +37,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false }
       # the PR this commit was merged from: its head SHA keys the reviewed plan and its number gets the result comment (both empty for direct pushes)
+      - uses: denzhel/tfpls/actions/bin@main
       - id: pr
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
-        run: |
-          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '[.[] | select(.merged_at != null)] | .[0] | "\(.head.sha // "")|\(.number // "")"' 2>/dev/null || true)
-          sha=${pr%%|*}; num=${pr#*|}
-          echo "head_sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "pr_number=$num" >> "$GITHUB_OUTPUT"
-          if [ -n "$num" ]; then echo "merged PR: #$num (head SHA $sha)"; else echo "merged PR: none, direct push"; fi
+        run: tfpls glue merged-pr
       - id: d
         uses: denzhel/tfpls/actions/detect-workspaces@main
         with:

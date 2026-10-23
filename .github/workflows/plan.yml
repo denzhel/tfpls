@@ -29,20 +29,12 @@ jobs:
         with: { fetch-depth: 0, persist-credentials: false }
       # Pull requests from forks get no secrets (GitHub withholds them), so a plan could only fail confusingly in init.
       # Say so, and do not plan. Maintainers can push the branch to this repository to have it planned.
+      - uses: denzhel/tfpls/actions/bin@main
       - id: fork
         shell: bash
         env:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-        run: |
-          if [ -n "$HEAD_REPO" ] && [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
-            echo "is_fork=true" >> "$GITHUB_OUTPUT"
-            msg="This pull request comes from a fork ($HEAD_REPO). Fork pull requests receive no credentials, so they are not planned. A maintainer can push the branch to $GITHUB_REPOSITORY to have it planned."
-            echo "::notice title=Fork pull request not planned::$msg"
-            echo "### Fork pull request not planned" >> "$GITHUB_STEP_SUMMARY"
-            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "is_fork=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: tfpls glue fork-check
       # a pull request that ADDS the pipeline (the caller workflow is not on the base commit) plans every workspace once, so a newcomer sees
       # a plan comment in the very first pull request, with credentials and backend checked before anything is merged
       - id: intro
