@@ -3,7 +3,7 @@
 #     filled-in issue without open questions is labelled `ready` by the gate; anyone else gets the reason in a comment (owner only);
 #   - Claude works on a branch `agent/issue-<n>`: tests first, then the change, docs and changelog, runs the checks, and opens a
 #     pull request for the owner to review (TLDR: what, why, how). It never merges, releases, tags or closes the issue.
-# Cost: the job `if:` below costs nothing, the `gate` job (tools/agent-gate.sh) refuses in seconds (not owner, not ready, open
+# Cost: the job `if:` below costs nothing, the `gate` job (`tfpls gate`, internal/gate) refuses in seconds (not owner, not ready, open
 # questions, kill switch, run caps) and says why on the issue, and only then the `agent` job runs, with a turn limit and a time limit.
 # Switch it off without a pull request: repository variable TFPLS_AGENT_ENABLED=false. The model: TFPLS_AGENT_MODEL_IMPLEMENT.
 # Test a change to the agent from its branch: `gh workflow run claude-implement.yml --ref <branch> -f issue=<n>` (owner only; the same gate).
@@ -68,6 +68,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: tfpls binary (built from the default branch checked out above)
+        uses: ./actions/bin
       - id: g
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,7 +82,7 @@ jobs:
           ENABLED: ${{ vars.TFPLS_AGENT_ENABLED }}
           MAX_IMPL_ISSUE: ${{ vars.TFPLS_AGENT_MAX_IMPL_PER_ISSUE }}
           MAX_IMPL_DAY: ${{ vars.TFPLS_AGENT_MAX_IMPL_PER_DAY }}
-        run: bash tools/agent-gate.sh implement
+        run: tfpls gate implement
       - name: Say why nothing runs and what happens next (once per reason)
         if: steps.g.outputs.comment_file != ''
         env:
@@ -152,6 +154,8 @@ jobs:
           curl -fsSL -o /tmp/actionlint.tgz "https://github.com/rhysd/actionlint/releases/download/v${v}/actionlint_${v}_linux_amd64.tar.gz"
           echo "$sum  /tmp/actionlint.tgz" | sha256sum -c -
           tar -xzf /tmp/actionlint.tgz -C /tmp actionlint && sudo install /tmp/actionlint /usr/local/bin/actionlint
+      - name: tfpls binary (for the report)
+        uses: ./actions/bin
       - name: install OpenTofu and conftest with the setup action
         uses: ./actions/setup
       - id: claude
@@ -190,4 +194,4 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OUTCOME: ${{ steps.claude.outcome }}
           EXEC: ${{ steps.claude.outputs.execution_file }}
-        run: bash tools/agent-report.sh
+        run: tfpls agent-report
