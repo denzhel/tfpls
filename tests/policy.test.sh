@@ -2,10 +2,9 @@
 # `tfpls approvals rules` (internal/approvals; was policy.jq + rules.sh): the workspace rules come from the DEFAULT BRANCH config, matched by (directory, workspace); the
 # approval counts come from the repository's ruleset.
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/bin/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/bin/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 export PATH="$T/bin:$PATH"   # rules.sh asks `tfpls validate-config`
 
 echo '[]' > "$T/rs-none.json"

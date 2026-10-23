@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # actions/drift-fix: `tfpls drift-fix parse` (commands, guards) and `filter` (drift_fix: false) with a gh stub (no network).
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; mkdir -p "$T/bin"
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"

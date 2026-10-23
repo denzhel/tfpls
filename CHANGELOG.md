@@ -6,6 +6,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: `tests/run-all.sh` builds `cmd/tfpls`, `cmd/release` and `cmd/toolversions` once and the test files copy them (`build_bin` in `tests/lib.sh`) instead of each running `go build`; a file run by hand still builds itself.
+
 - **Changed:** the default OpenTofu is now 1.13.2 (was 1.13.1) for repositories that do not ask for a version (`.opentofu-version`, `.tofu-version`, `.terraform-version`, an exact `required_version` or the `tofu_version` input); the download is still verified against the release checksums. To stay on 1.13.1, pin it in one of those places or use `@v0.9.0`.
 ## v0.9.0
 

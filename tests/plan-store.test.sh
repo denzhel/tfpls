@@ -14,7 +14,8 @@ contains()    { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (got: $2)";; esac; }
 
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 # the store is Go: build the binary that the functions of plan-store.sh call
-(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+. "$here/lib.sh"
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 export TFPLS_PLAN_STORE_BIN="$T/tfpls"
 mkdir "$T/w"; head -c 4096 /dev/urandom > "$T/w/tfplan"
 cat > "$T/meta.json" <<J

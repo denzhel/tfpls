@@ -4,7 +4,7 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-( cd "$here" && go build -o "$T/release" ./cmd/release ) || { bad "go build ./cmd/release"; exit 1; }
+build_bin release "$T/release" || { bad "go build ./cmd/release"; exit 1; }
 R="$T/release"
 
 slug=$(grep -rhoE '[A-Za-z0-9_.-]+/tfpls/(actions|\.github)' "$here/.github/workflows" | head -1 | sed -E 's#/tfpls/(actions|\.github)$#/tfpls#')

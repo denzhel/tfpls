@@ -15,4 +15,19 @@ wait_for() {
   done
   return 1
 }
+# build_bin <tfpls|release|toolversions> <dest> [go build flags]: put the binary of ./cmd/<name> at <dest>.
+# tests/run-all.sh builds each once and exports TFPLS_TEST_BIN / TFPLS_TEST_RELEASE_BIN / TFPLS_TEST_TOOLVERSIONS_BIN;
+# a file run by hand (or one that passes its own flags, e.g. -ldflags) builds it itself.
+build_bin() {
+  local name=$1 dest=$2 pre="" root; shift 2
+  root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  case "$name" in
+    tfpls) pre=${TFPLS_TEST_BIN:-} ;;
+    release) pre=${TFPLS_TEST_RELEASE_BIN:-} ;;
+    toolversions) pre=${TFPLS_TEST_TOOLVERSIONS_BIN:-} ;;
+  esac
+  mkdir -p "$(dirname "$dest")"
+  if [ "$#" -eq 0 ] && [ -n "$pre" ] && [ -x "$pre" ]; then cp "$pre" "$dest"; return; fi
+  (cd "$root" && go build -o "$dest" "$@" "./cmd/$name")
+}
 done_tests() { echo; echo "$pass passed, $failn failed"; [ "$failn" -eq 0 ]; }

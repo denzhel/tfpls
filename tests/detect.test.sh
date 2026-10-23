@@ -5,7 +5,7 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 ACTION="$here/../actions/detect-workspaces/action.yml"
 [ "$(yq -r '.runs.steps[0].uses' "$ACTION")|$(yq -r '.runs.steps[1].run' "$ACTION")" = "denzhel/tfpls/actions/bin@main|tfpls detect" ] && ok "the action installs the binary and runs tfpls detect" || bad "the action does not run tfpls detect"
 

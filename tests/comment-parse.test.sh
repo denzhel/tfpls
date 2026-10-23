@@ -5,7 +5,7 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 CW="$here/.github/workflows/comment-ops.yml"
 eq "comment-ops.yml installs the binary, then runs tfpls comment parse" "$(yq -r '[.jobs.parse.steps[0].uses, (.jobs.parse.steps[] | select(.id == "p") | .run)] | join("|")' "$CW")" "denzhel/tfpls/actions/bin@main|tfpls comment parse"
 

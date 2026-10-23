@@ -4,9 +4,8 @@
 # the project reaches the agent only as fenced data in proposal mode). `gh` is a stub that serves fixtures. Also tfpls agent-report.
 # Run: bash tests/agent-gate.test.sh
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-TFPLS="$(mktemp -d)/tfpls"; (cd "$here" && go build -o "$TFPLS" ./cmd/tfpls) || { echo "go build failed"; exit 1; }
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+TFPLS="$(mktemp -d)/tfpls"; build_bin tfpls "$TFPLS" || { echo "go build failed"; exit 1; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/fx"
 

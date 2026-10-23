@@ -3,8 +3,8 @@
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 check() { # name expected-rc needs-json
   NEEDS="$3" "$T/tfpls" result >/dev/null 2>&1; rc=$?
   if { [ "$2" = 0 ] && [ $rc -eq 0 ]; } || { [ "$2" != 0 ] && [ $rc -ne 0 ]; }; then ok "$1"; else bad "$1 (rc=$rc)"; fi

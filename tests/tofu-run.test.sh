@@ -8,7 +8,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin"
-(cd "$here" && go build -o "$T/bin/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/bin/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 
 cat > "$T/bin/tofu" <<'STUB'
 #!/usr/bin/env bash

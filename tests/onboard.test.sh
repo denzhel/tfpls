@@ -11,7 +11,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 t=$(mktemp -d); trap 'chmod -R u+w "$t" 2>/dev/null; rm -rf "$t"' EXIT
 init="${TFPLS_ONBOARD:-}"
 if [ -z "$init" ]; then
-  (cd "$here" && go build -o "$t/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+  build_bin tfpls "$t/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
   printf '#!/bin/sh\nexec "%s" onboard "$@"\n' "$t/tfpls" > "$t/onboard"; chmod +x "$t/onboard"; init="$t/onboard"
 fi
 unset NO_COLOR FORCE_COLOR TFPLS_ONBOARD_TTY
@@ -36,7 +36,7 @@ chmod +x "$t/bin/gh"; export PATH="$t/bin:$PATH" STUB_LOG="$t/gh.log" STUB_DIR="
 ob() { "$init" "$@" </dev/null 2>&1; }                                     # no terminal: stdout captured, no input
 ans() { local a=$1; shift; printf '%b' "$a" | TFPLS_ONBOARD_TTY=/dev/stdin "$init" "$@" 2>&1; }   # answers via stdin
 snap() { (cd "$1" && find . -path ./.git -prune -o -type f -print | LC_ALL=C sort | while IFS= read -r f; do cksum "$f"; done); }
-valid() { [ -x "$t/tfpls" ] || (cd "$here" && go build -o "$t/tfpls" ./cmd/tfpls); "$t/tfpls" validate-config < "$1"; }
+valid() { [ -x "$t/tfpls" ] || build_bin tfpls "$t/tfpls"; "$t/tfpls" validate-config < "$1"; }
 noop() { # noop <label> <dir> [options]: a second run changes no file and says so
   local d=$1 s1 o; shift; d=$1; shift
   s1=$(snap "$d"); o=$(ob "$@" "$d"); local rc=$?

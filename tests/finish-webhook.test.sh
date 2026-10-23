@@ -7,7 +7,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
 F="$here/actions/finish/action.yml"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 # pick [VAR=value ...]: run the script in an empty environment; prints rc=<status>; the log is in $T/log, the step output in $T/out
 pick() { : > "$T/out"; env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" "$@" "$T/tfpls" finish webhook > "$T/log" 2>&1; echo "rc=$?"; }
 url() { sed -n 's/^url=//p' "$T/out"; }

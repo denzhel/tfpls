@@ -10,7 +10,7 @@ R=$T/release
 tag=v9.9.9-test.1
 
 if ! command -v go >/dev/null 2>&1; then echo "skip: go is not installed"; exit 0; fi
-go build -o "$R" ./cmd/release && ok "cmd/release builds" || { bad "cmd/release does not build"; done_tests; exit; }
+build_bin release "$R" && ok "cmd/release builds" || { bad "cmd/release does not build"; done_tests; exit; }
 
 out=$("$R" build "$tag" "$T/dist" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "the build succeeds" || { bad "build failed ($rc): $out"; done_tests; exit; }

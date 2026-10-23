@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Offline tests for `tfpls env` (actions/env). Run: bash tests/env.test.sh
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 
 # run <name> <env assignments...>  -> sets rc, OUT (stdout), and files $T/env $T/out $T/sum
 run() {
