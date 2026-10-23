@@ -37,7 +37,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: denzhel/tfpls/actions/bin@main
+    - uses: denzhel/tfpls/actions/bin@v0.9.0-rc.2
     - shell: bash
       env:
         WORKSPACE: ${{ inputs.workspace }}
