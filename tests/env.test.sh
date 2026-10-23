@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Offline tests for actions/env/export.sh. Run: bash tests/env.test.sh
+# Offline tests for `tfpls env` (actions/env). Run: bash tests/env.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-S="$here/../actions/env/export.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here/.." && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 
 # run <name> <env assignments...>  -> sets rc, OUT (stdout), and files $T/env $T/out $T/sum
 run() {
   : > "$T/env"; : > "$T/out"; : > "$T/sum"
-  OUT=$(env -i PATH="$PATH" GITHUB_ENV="$T/env" GITHUB_OUTPUT="$T/out" GITHUB_STEP_SUMMARY="$T/sum" "$@" bash "$S" 2>&1); rc=$?
+  OUT=$(env -i PATH="$PATH" GITHUB_ENV="$T/env" GITHUB_OUTPUT="$T/out" GITHUB_STEP_SUMMARY="$T/sum" "$@" "$T/tfpls" env 2>&1); rc=$?
 }
 has()  { grep -q -- "$1" "$T/env"; }
 CRED='{"AWS_ACCESS_KEY_ID":"the-key","TFPLS_CRED_KIND":"one"}'
@@ -33,7 +33,7 @@ case "$OUT" in *"::add-mask::long-secret-token"*) ok "long secret still masked";
 case "$OUT" in *"credentials: env"*) ok "credentials notice stays readable";; *) bad "notice: $OUT";; esac
 
 run JSON="$(jq -cn --arg v $'line1\nline2' '{PEM:$v}')"
-[ "$(sed -n '/^PEM<</,/^__TFPLS_EOF/p' "$T/env" | sed '1d;$d' | tr '\n' '|')" = "line1|line2|" ] && ok "multi-line values survive" || bad "multi-line value"
+[ "$(sed -n '/^PEM<</,/^tfpls_/p' "$T/env" | sed '1d;$d' | tr '\n' '|')" = "line1|line2|" ] && ok "multi-line values survive" || bad "multi-line value"
 
 run JSON=""
 [ $rc -eq 0 ] && grep -q 'credentials=none' "$T/out" && ok "empty credentials are allowed (ambient auth)" || bad "empty creds"
