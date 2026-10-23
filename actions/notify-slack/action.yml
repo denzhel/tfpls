@@ -42,7 +42,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: denzhel/tfpls/actions/bin@main
+    - uses: denzhel/tfpls/actions/bin@v0.9.0
       if: inputs.webhook != ''
     - shell: bash
       if: inputs.webhook != ''

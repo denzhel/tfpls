@@ -29,7 +29,7 @@ jobs:
         with: { fetch-depth: 0, persist-credentials: false }
       # Pull requests from forks get no secrets (GitHub withholds them), so a plan could only fail confusingly in init.
       # Say so, and do not plan. Maintainers can push the branch to this repository to have it planned.
-      - uses: denzhel/tfpls/actions/bin@main
+      - uses: denzhel/tfpls/actions/bin@v0.9.0
       - id: fork
         shell: bash
         env:
@@ -39,14 +39,14 @@ jobs:
       # a plan comment in the very first pull request, with credentials and backend checked before anything is merged
       - id: intro
         if: steps.fork.outputs.is_fork != 'true'
-        uses: denzhel/tfpls/actions/pr-notes@main
+        uses: denzhel/tfpls/actions/pr-notes@v0.9.0
         with:
           mode: introduced
           base_sha: ${{ github.event.pull_request.base.sha }}
           pr_number: ${{ github.event.pull_request.number }}
       - id: d
         if: steps.fork.outputs.is_fork != 'true'
-        uses: denzhel/tfpls/actions/detect-workspaces@main
+        uses: denzhel/tfpls/actions/detect-workspaces@v0.9.0
         with:
           config: ${{ inputs.config }}
           mode: ${{ steps.intro.outputs.introduced == 'true' && 'all' || 'changed' }}
@@ -54,19 +54,19 @@ jobs:
           head_ref: ${{ github.event.pull_request.head.sha }}   # the diff is the pull request's own changes, even if the base moved on since it was opened
       # nothing configured and nothing found: say so on the pull request (and remove the note again once workspaces exist)
       - if: steps.fork.outputs.is_fork != 'true' && steps.d.outputs.configured == '0'
-        uses: denzhel/tfpls/actions/pr-notes@main
+        uses: denzhel/tfpls/actions/pr-notes@v0.9.0
         with:
           mode: no-workspaces
           config: ${{ inputs.config }}
           pr_number: ${{ github.event.pull_request.number }}
       - if: steps.fork.outputs.is_fork != 'true' && steps.d.outputs.configured != '0'
-        uses: denzhel/tfpls/actions/pr-notes@main
+        uses: denzhel/tfpls/actions/pr-notes@v0.9.0
         with:
           mode: clear
           pr_number: ${{ github.event.pull_request.number }}
       # a workspace that an earlier commit of this PR planned but the latest commit no longer touches: say so on its comment
       - if: steps.fork.outputs.is_fork != 'true'
-        uses: denzhel/tfpls/actions/mark-outdated@main
+        uses: denzhel/tfpls/actions/mark-outdated@v0.9.0
         with:
           pr_number: ${{ github.event.pull_request.number }}
           names: ${{ steps.d.outputs.names }}
@@ -87,7 +87,7 @@ jobs:
       group: tfpls-${{ github.repository }}-${{ fromJSON(needs.detect.outputs.entries)[matrix.label].name }}-plan-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - uses: denzhel/tfpls/actions/prepare@main
+      - uses: denzhel/tfpls/actions/prepare@v0.9.0
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           tofu_version: ${{ inputs.tofu_version }}
@@ -95,7 +95,7 @@ jobs:
           report_pr: ${{ strategy.job-index == 0 && github.event.pull_request.number || '' }}
           json: ${{ secrets.TFPLS_ENV_JSON }}
       - id: t
-        uses: denzhel/tfpls/actions/tofu@main
+        uses: denzhel/tfpls/actions/tofu@v0.9.0
         with:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           pr_number: ${{ github.event.pull_request.number }}
