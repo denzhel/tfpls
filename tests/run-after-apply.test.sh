@@ -10,7 +10,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin"
 # the binary under test; the shell of the test packs its fixture plan with the same one
-(cd "$here" && go build -o "$T/bin/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/bin/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 export TFPLS_PLAN_STORE_BIN="$T/bin/tfpls"
 SHA=abcdef0123456789abcdef0123456789abcdef01
 RUN=https://github.com/o/r/actions/runs   # this run is $RUN/222; the /tofu apply run in the comments is $RUN/111

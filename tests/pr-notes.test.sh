@@ -4,7 +4,7 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 N="$T/tfpls pr-notes"
 mkdir -p "$T/bin" "$T/repo/.github/workflows"
 git -C "$T/repo" init -q -b main; git -C "$T/repo" config user.email t@t; git -C "$T/repo" config user.name t

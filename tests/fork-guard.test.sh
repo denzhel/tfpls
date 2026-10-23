@@ -4,7 +4,7 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 [ "$(yq -r '.jobs.detect.steps[] | select(.id == "fork") | .run' "$here/.github/workflows/plan.yml")" = "tfpls glue fork-check" ] && ok "plan.yml runs the fork guard command" || { bad "no fork step"; exit 1; }
 run() { : > "$T/out"; : > "$T/sum"; OUT=$(env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" GITHUB_STEP_SUMMARY="$T/sum" GITHUB_REPOSITORY=o/r HEAD_REPO="$1" "$T/tfpls" glue fork-check 2>&1); rc=$?; }
 run "o/r";        grep -q "is_fork=false" "$T/out" && [ $rc -eq 0 ] && ok "same-repo pull request is planned" || bad "same repo: $OUT"

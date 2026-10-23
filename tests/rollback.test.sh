@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Tests for `tfpls tofu rollback` (hints after a failed apply)
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # ---- rollback hints
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 cat > "$T/apply.txt" <<'A'
 aws_sqs_queue.this["a"]: Creating...
 aws_sqs_queue.this["a"]: Creation complete after 1s [id=x]

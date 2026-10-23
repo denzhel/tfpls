@@ -7,7 +7,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
 W="$here/.github/workflows/tool-versions.yml"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-( cd "$here" && go build -o "$T/toolversions" ./cmd/toolversions ) || { bad "go build ./cmd/toolversions"; exit 1; }
+build_bin toolversions "$T/toolversions" || { bad "go build ./cmd/toolversions"; exit 1; }
 mkdir -p "$T/bin" "$T/stub" "$T/root/internal/setup" "$T/root/.github/workflows"
 # the script reads copies of the real files, so the test follows the real defaults and their real layout
 cp "$here/internal/setup/setup.go" "$T/root/internal/setup/setup.go"

@@ -4,7 +4,7 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 rev() { jq -cn --arg u "$1" --arg s "$2" --arg c "$3" --arg t "${4:-2026-10-10T10:00:00Z}" '{user:{login:$u,type:"User"},state:$s,commit_id:$c,submitted_at:$t}'; }
 mk() { printf '%s\n' "$@" | jq -s '.' > "$T/r.json"; }
 chk() { "$T/tfpls" approvals check "$T/r.json" HEAD "$1" "$2"; echo "rc=$?"; }

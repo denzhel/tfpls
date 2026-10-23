@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Tests for `tfpls notify-slack` against a local webhook receiver that records the request (path and body).
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'kill "${SRV:-0}" 2>/dev/null; rm -rf "$T"' EXIT; mkdir -p "$T/bin"
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 cat > "$T/srv.py" <<'PY'
 import http.server, os, sys
 d = sys.argv[1]

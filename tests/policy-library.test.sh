@@ -12,7 +12,7 @@ if [ -z "$C" ]; then
   C=$(find "${RUNNER_TOOL_CACHE:-$HOME/.cache}" -path '*conftest*' -name conftest -type f 2>/dev/null | head -1)
 fi
 if [ -z "$C" ]; then
-  (cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) && TFPLS_TOOL_CACHE="$T/cache" GITHUB_PATH="$T/path" INSTALL_CONFTEST=true "$T/tfpls" setup >/dev/null 2>&1 || true
+  build_bin tfpls "$T/tfpls" && TFPLS_TOOL_CACHE="$T/cache" GITHUB_PATH="$T/path" INSTALL_CONFTEST=true "$T/tfpls" setup >/dev/null 2>&1 || true
   C=$(find "$T/cache" -name conftest -type f 2>/dev/null | head -1)
 fi
 [ -n "$C" ] || { echo "conftest not available"; exit 1; }

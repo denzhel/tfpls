@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Tests for `tfpls unlock` (one workspace, report mode) with stubbed tofu and gh (no network, no state backend).
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 U="$T/tfpls"
 mkdir -p "$T/bin" "$T/repo/dir"
 

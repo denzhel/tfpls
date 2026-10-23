@@ -83,7 +83,7 @@ out=$(printf 'typed\n' | TFPLS_ONBOARD_BIN="$t/local" bash "$boot" 2>&1); eq "th
 if command -v go >/dev/null 2>&1; then
   os=$(uname -s | tr 'A-Z' 'a-z'); arch=$(uname -m); case $arch in x86_64) arch=amd64;; aarch64) arch=arm64;; esac
   real="$t/real/latest/download"; mkdir -p "$real" "$t/rb"
-  (cd "$here" && go build -o "$t/rb/tfpls" ./cmd/tfpls) && tar -czf "$real/tfpls_${os}_${arch}.tar.gz" -C "$t/rb" tfpls \
+  build_bin tfpls "$t/rb/tfpls" && tar -czf "$real/tfpls_${os}_${arch}.tar.gz" -C "$t/rb" tfpls \
     && printf '%s  %s\n' "$(sha "$real/tfpls_${os}_${arch}.tar.gz")" "tfpls_${os}_${arch}.tar.gz" > "$real/SHA256SUMS"
   mkdir -p "$t/proj/workspaces/dev"
   out=$(NO_COLOR=1 TFPLS_RELEASE_BASE="file://$t/real" XDG_CACHE_HOME="$t/cache2" run bash "$boot" --dry-run --yes --no-jokes "$t/proj")

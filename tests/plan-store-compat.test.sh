@@ -8,7 +8,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 bin=${TFPLS_PLAN_STORE_BIN:-}
 if [ -z "$bin" ]; then
-  (cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+  build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
   bin=$T/tfpls
 fi
 

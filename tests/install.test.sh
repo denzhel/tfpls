@@ -2,10 +2,9 @@
 # Tests for `tfpls setup` (internal/setup) against a local HTTP server that can fail on demand. No real network.
 # Run: bash tests/install.test.sh   (needs go and python3)
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'kill "${SRV:-}" 2>/dev/null; rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "go build failed"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "go build failed"; exit 1; }
 
 # ---- fixtures: fake release assets laid out like the GitHub release URLs, with real checksum files
 python3 - "$T/srv" <<'PY'

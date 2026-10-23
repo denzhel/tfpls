@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Tests for the OIDC path of `tfpls env` against fake GitHub-OIDC and STS servers (no cloud, no network).
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'kill ${SRV:-} 2>/dev/null; rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 E="$T/tfpls"
 PORT=$((20000 + RANDOM % 20000))
 cat > "$T/srv.py" <<'PY'

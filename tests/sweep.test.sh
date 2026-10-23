@@ -2,10 +2,9 @@
 # `tfpls unlock` with ENTRIES (the manual `locks` task): reports every workspace's lock, releases only workspaces named in RELEASE.
 # Stubbed tofu and gh (no network).
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 SW="$T/tfpls"
 mkdir -p "$T/bin" "$T/repo/a" "$T/repo/b" "$T/repo/c"
 # a directory holding a file `lock` is locked since the time written in it; a file `broken` makes init fail

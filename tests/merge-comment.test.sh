@@ -14,7 +14,7 @@ eq "the apply job may write the comment" "$(yq -r '.jobs.apply.permissions."pull
 eq "the detect job still only reads" "$(yq -r '.jobs.detect.permissions."pull-requests"' "$A")" "read"
 
 # the lookup of the detect job (tfpls glue merged-pr), run against a fake gh that prints a fixture
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 eq "apply.yml runs tfpls glue merged-pr" "$(yq -r '.jobs.detect.steps[] | select(.id == "pr") | .run' "$A")" "tfpls glue merged-pr"
 mkdir -p "$T/bin"
 cat > "$T/bin/gh" <<'EOF'

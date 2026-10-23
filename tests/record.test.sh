@@ -5,7 +5,7 @@ export TFPLS_RETRY_SLEEP=0   # retries pause randomly in the scripts under test;
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 git init -q --bare "$T/remote.git"
 export TFPLS_REMOTE_URL="$T/remote.git"
 B=(WORKSPACE=dev KIND=apply STATUS=applied REPO=o/r ACTOR=alice TRIGGER=push SHA=abc RUN_URL=http://run/1 BRANCH=tfpls-data TFPLS_NOW=2026-10-10T10:00:00Z)
