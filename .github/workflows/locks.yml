@@ -27,16 +27,16 @@ jobs:
     timeout-minutes: ${{ inputs.timeout_minutes < 60 && 60 || inputs.timeout_minutes }}
     # deliberately no concurrency group: waiting behind a hung run would defeat the check (unlock.sh looks for active runs itself)
     steps:
-      - uses: denzhel/tfpls/actions/prepare@main
+      - uses: denzhel/tfpls/actions/prepare@v0.8.0-rc.1
         with:
           tofu_version: ${{ inputs.tofu_version }}
           role_arn: ${{ vars.TFPLS_ROLE_ARN }}
           json: ${{ secrets.TFPLS_ENV_JSON }}
       - id: d
-        uses: denzhel/tfpls/actions/detect-workspaces@main
+        uses: denzhel/tfpls/actions/detect-workspaces@v0.8.0-rc.1
         with: { config: "${{ inputs.config }}", mode: all }
       - if: steps.d.outputs.any == 'true'
-        uses: denzhel/tfpls/actions/unlock@main
+        uses: denzhel/tfpls/actions/unlock@v0.8.0-rc.1
         with:
           sweep_entries: ${{ steps.d.outputs.entries }}
           release: ${{ inputs.workspaces }}
