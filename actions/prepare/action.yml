@@ -23,11 +23,11 @@ runs:
   steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with: { ref: "${{ inputs.ref }}", persist-credentials: false }
-    - uses: denzhel/tfpls/actions/setup@main
+    - uses: denzhel/tfpls/actions/setup@v0.9.1
       with:
         tofu_version: "${{ inputs.tofu_version }}"
         conftest: "${{ inputs.entry != '' && (fromJSON(inputs.entry).policy_dir != '' || fromJSON(inputs.entry).policy_packs != '') }}"
-    - uses: denzhel/tfpls/actions/env@main
+    - uses: denzhel/tfpls/actions/env@v0.9.1
       with:
         role_arn: ${{ inputs.role_arn }}
         report_pr: ${{ inputs.report_pr }}

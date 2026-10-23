@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - id: d
-        uses: denzhel/tfpls/actions/dashboard@main
+        uses: denzhel/tfpls/actions/dashboard@v0.9.1
       - name: Run summary
         shell: bash
         run: cat "${{ steps.d.outputs.path }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
@@ -27,7 +27,7 @@ jobs:
           path: ${{ steps.d.outputs.path }}
           retention-days: 14
           overwrite: true
-      - uses: denzhel/tfpls/actions/bin@main
+      - uses: denzhel/tfpls/actions/bin@v0.9.1
       - name: Store the page on the data branch
         if: inputs.commit_page
         shell: bash
