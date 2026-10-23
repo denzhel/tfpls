@@ -27,6 +27,7 @@ jobs:
           path: ${{ steps.d.outputs.path }}
           retention-days: 14
           overwrite: true
+      - uses: denzhel/tfpls/actions/bin@main
       - name: Store the page on the data branch
         if: inputs.commit_page
         shell: bash
@@ -34,17 +35,7 @@ jobs:
           TOKEN: ${{ github.token }}
           BRANCH: tfpls-data
           SRC: ${{ steps.d.outputs.path }}
-        run: |
-          set -uo pipefail
-          d=$(mktemp -d)
-          git clone --quiet --depth 1 --branch "$BRANCH" "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$d" 2>/dev/null \
-            || { echo "::warning::no \`$BRANCH\` branch to store the page on"; exit 0; }
-          mkdir -p "$d/dashboard"; cp "$SRC/index.html" "$d/dashboard/index.html"
-          cd "$d" && git add -A
-          git diff --cached --quiet && exit 0
-          git -c user.name=tfpls -c user.email=tfpls@users.noreply.github.com commit --quiet -m "dashboard: refresh"
-          for _ in 1 2 3; do git push --quiet origin "$BRANCH" && exit 0; git pull --quiet --rebase origin "$BRANCH"; done
-          echo "::warning::could not store the page"
+        run: tfpls glue store-page
       - if: inputs.pages
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

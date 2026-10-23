@@ -91,19 +91,14 @@ jobs:
           report_pr: ${{ strategy.job-index == 0 && github.event.issue.number || '' }}
           json: ${{ secrets.TFPLS_ENV_JSON }}
       # the issue that gets the plan comment: the one the command was written on, else the open `Drift: <workspace>` issue
+      - uses: denzhel/tfpls/actions/bin@main
       - id: iss
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GIVEN: ${{ needs.parse.outputs.issue }}
           LABEL: ${{ matrix.label }}
-        run: |
-          n="$GIVEN"
-          if [ -z "$n" ]; then
-            n=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label tfpls-drift --limit 100 --json number,title 2>/dev/null \
-                  | jq -r --arg t "Drift: $LABEL" '.[] | select(.title == $t) | .number' | head -1 || true)
-          fi
-          echo "number=${n:-}" >> "$GITHUB_OUTPUT"
+        run: tfpls glue drift-issue
       - id: t
         uses: denzhel/tfpls/actions/tofu@main
         with:

@@ -63,16 +63,13 @@ jobs:
           entry: ${{ toJSON(fromJSON(needs.detect.outputs.entries)[matrix.label]) }}
           auto_apply: ${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate || 'never') }}
           apply: ${{ (fromJSON(needs.detect.outputs.entries)[matrix.label].drift_remediate || 'never') != 'never' && 'auto' || 'none' }}
+      - if: always()
+        uses: denzhel/tfpls/actions/bin@main
       - id: s
         if: always()
         shell: bash
         env: { S: "${{ steps.t.outputs.status }}" }
-        run: |
-          case "$S" in
-            no-changes|applied) echo "state=in-sync" >> "$GITHUB_OUTPUT";;
-            planned|skipped) echo "state=drift" >> "$GITHUB_OUTPUT";;
-            *) echo "state=error" >> "$GITHUB_OUTPUT";;
-          esac
+        run: tfpls glue drift-state
       # always: the drift state on the data branch feeds the dashboard and the alerts (transitions); drift_issues only decides about the issues
       - id: tr
         if: always()

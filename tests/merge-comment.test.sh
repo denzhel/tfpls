@@ -13,20 +13,20 @@ eq "the apply step hands the PR number to the tofu action" "$(yq -r '.jobs.apply
 eq "the apply job may write the comment" "$(yq -r '.jobs.apply.permissions."pull-requests"' "$A")" "write"
 eq "the detect job still only reads" "$(yq -r '.jobs.detect.permissions."pull-requests"' "$A")" "read"
 
-# the lookup script of the detect job, run against a fake gh that applies the real --jq expression to a fixture
-yq -r '.jobs.detect.steps[] | select(.id == "pr") | .run' "$A" > "$T/pr.sh"
+# the lookup of the detect job (tfpls glue merged-pr), run against a fake gh that prints a fixture
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+eq "apply.yml runs tfpls glue merged-pr" "$(yq -r '.jobs.detect.steps[] | select(.id == "pr") | .run' "$A")" "tfpls glue merged-pr"
 mkdir -p "$T/bin"
 cat > "$T/bin/gh" <<'EOF'
 #!/usr/bin/env bash
-# gh api <path> --jq <expr>: print the fixture through the expression
-expr=""; while [ $# -gt 0 ]; do [ "$1" = "--jq" ] && expr=$2; shift; done
-jq -r "$expr" "$FIXTURE"
+# gh api <path>: print the fixture
+cat "$FIXTURE"
 EOF
 chmod +x "$T/bin/gh"
 lookup() { # <fixture json>: prints "head_sha|pr_number"
   printf '%s' "$1" > "$T/fixture.json"
   : > "$T/out"
-  FIXTURE="$T/fixture.json" PATH="$T/bin:$PATH" GITHUB_OUTPUT="$T/out" GITHUB_REPOSITORY=o/r SHA=abc123 bash "$T/pr.sh" >/dev/null 2>&1
+  FIXTURE="$T/fixture.json" PATH="$T/bin:$PATH" GITHUB_OUTPUT="$T/out" GITHUB_REPOSITORY=o/r SHA=abc123 "$T/tfpls" glue merged-pr >/dev/null 2>&1
   echo "$(sed -n 's/^head_sha=//p' "$T/out")|$(sed -n 's/^pr_number=//p' "$T/out")"
 }
 eq "a merged PR gives its head SHA and number" "$(lookup '[{"number":7,"merged_at":"2026-10-19T00:00:00Z","head":{"sha":"deadbeef"}}]')" "deadbeef|7"
