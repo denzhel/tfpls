@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The cleanup function of unlock.sh (extracted from the real file; the tofu engine is in tests/tofu-run.test.sh) must remove everything that can hold
-# secret values from the workspace and nothing that belongs to the repository. Run: bash tests/cleanup.test.sh
+# The wiring of the always-run cleanup step of the composite actions (the cleanup code itself is in internal/unlock and internal/tofu):
+# it must remove everything that can hold secret values from the workspace and nothing that belongs to the repository. Run: bash tests/cleanup.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"

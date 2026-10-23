@@ -183,7 +183,7 @@ jobs:
             --max-turns 60
             --model ${{ vars.TFPLS_AGENT_MODEL_IMPLEMENT || 'claude-sonnet-5-5' }}
             --allowedTools "Read,Edit,Write,Grep,Glob,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git branch:*),Bash(git add:*),Bash(git commit:*),Bash(git switch:*),Bash(git checkout -b:*),Bash(git push -u origin agent/*),Bash(gh pr create:*),Bash(gh pr list:*),Bash(gh pr view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(bash tests/*),Bash(shellcheck:*),Bash(actionlint:*),Bash(yq:*),Bash(jq:*)"
-            --disallowedTools "Edit(.github/workflows/claude-*),Write(.github/workflows/claude-*),Edit(tools/agent-*),Write(tools/agent-*),Edit(AGENTS.md),Write(AGENTS.md)"
+            --disallowedTools "Edit(.github/workflows/claude-*),Write(.github/workflows/claude-*),Edit(internal/gate/*),Write(internal/gate/*),Edit(cmd/tfpls/cmd_gate.go),Write(cmd/tfpls/cmd_gate.go),Edit(AGENTS.md),Write(AGENTS.md)"
       - name: Report what the run used
         if: always()
         env:

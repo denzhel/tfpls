@@ -104,7 +104,7 @@ grep -qE 'Bash\([^)]*/:\*\)' <<<"$ai$ae" && bad "a Bash rule ends in '/:*', whic
 grep -qF 'Bash(bash tests/*)' <<<"$ai" && ok "implement: it can run the test files (bash tests/<name>.test.sh)" || bad "implement: tests cannot be run"
 grep -q 'no pipes' <<<"$(prompt "$I")" && ok "implement: the prompt asks for one simple command per call" || bad "implement: prompt lacks the one-command rule"
 grep -qE 'git push:\*|git push origin|git push -u origin [^a]' <<<"$ai" && bad "implement: a broad git push is allowed" || ok "implement: no broad git push"
-for guard in ".github/workflows/claude-" "tools/agent-" "AGENTS.md"; do
+for guard in ".github/workflows/claude-" "internal/gate/" "cmd/tfpls/cmd_gate.go" "AGENTS.md"; do
   grep -q "disallowedTools.*Edit($guard" <<<"$ai" && grep -q "Write($guard" <<<"$ai" && ok "implement: it cannot edit $guard" || bad "implement: $guard is editable"
 done
 [ "$(y "$I" '.permissions."pull-requests"')" = write ] && [ "$(y "$I" '.permissions.contents')" = write ] && ok "implement: it can push and open a pull request" || bad "implement: permissions"
