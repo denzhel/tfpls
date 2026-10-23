@@ -1,6 +1,6 @@
 # tfpls documentation
 
-Start with [getting started](getting-started.md), keep the [runbooks](runbooks.md) at hand, read the [security model](security-model.md) before you give the workflows credentials.
+Start with [getting started](getting-started.md), keep the [runbooks](runbooks.md) at hand, read the [security model](security-model.md) before you give the workflows credentials. The tfpls binary of a release is verified by its SHA-256 checksum and build provenance ([details](security-model.md#the-tfpls-binary-and-the-toolchain)).
 
 | I want to… | Read |
 |---|---|
