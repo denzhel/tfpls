@@ -6,6 +6,8 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- The reviewed-plan store is Go (`internal/planstore`, `tfpls plan-store`); same file format, artifact names, trust rules for finding a plan, refusal texts and hints (`actions/tofu/plan-store.sh` keeps only thin function wrappers until the tofu action itself is ported). `tools/tfpls-plan` is now `tfpls plan decrypt|show` (needs no openssl or jq). `tests/plan-store-compat.test.sh` proves a plan sealed by the openssl path opens in Go and the reverse. Hardening: an unpacked member is size-bounded, only the two expected regular files are read from the archive.
+- Maintainers: CI runs `govulncheck` (pinned v1.1.4) on the Go module, and a negative step proves it fails on a known-vulnerable module version (`golang.org/x/text` v0.3.0). The first run found GO-2026-4602 (`os`, fixed in Go 1.25.8) in what `go 1.24` resolved to, so `go.mod` now has `toolchain go1.26.10` (CI and the release binaries are built with it; `go 1.24` stays the minimum, so a runner with an older Go can still build a branch ref).
 ## v0.7.0
 
 - **Changed (internal, no action for callers):** ten more modules run as Go inside the `tfpls` binary instead of Bash/jq/yq: detect-workspaces, approvals, codeowners, record, wait-for, finish, notify-slack, drift-report, dashboard, pr-notes and mark-outdated. Same inputs, outputs and messages; each port fixed the Bash bugs it found (listed in its PR). Proven on the sandbox with `v0.7.0-rc.1` (plan, apply, merge apply, guards, behind-main, notifications, scheduled tasks, queue bursts, onboarding, 0 Node 20 warnings). The only `jq` left in a job is the user's own `notify_template`.
