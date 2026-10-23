@@ -4,7 +4,7 @@
 
 1. Open an issue (templates in `.github/ISSUE_TEMPLATE`) or comment on an existing one. New issues are triaged by Claude (milestone, labels, a proposed priority and size); comment `/triage` on an issue to have it triaged or re-triaged ([issue triage](#issue-triage-maintainers)). Issues of maintainers are filled in by the [issue agent](#issue-agent-maintainers). For anything beyond a small fix, agree on the approach first.
 2. Branch from `main`; one focused change per pull request, using the pull request template.
-3. Add or update tests: `bash tests/run-all.sh` runs the whole offline suite (no network, no cloud, stubs for `gh`, `tofu` and `npx`). New behaviour comes with a test that fails without it.
+3. Build and test the Go code: `go build -o /tmp/tfpls ./cmd/tfpls` (the black-box tests build it themselves), `go test ./...`, `gofmt -l .` (prints nothing) and `go vet ./...`; CI also runs `govulncheck ./...`, so a new dependency or a toolchain change is checked for known vulnerabilities ([the binary and the toolchain](docs/security-model.md#the-tfpls-binary-and-the-toolchain)). Then add or update tests: `bash tests/run-all.sh` runs the whole offline suite (no network, no cloud, stubs for `gh`, `tofu` and `npx`). New behaviour comes with a test that fails without it.
 4. Run the linters CI runs: `actionlint` and `shellcheck -S warning actions/bin/install.sh tools/onboard tools/release.sh tools/tfpls-dashboard tests/*.sh`.
 5. Update the docs (`docs/`, the README configuration tables, `examples/`) and add a line under *Unreleased* in `CHANGELOG.md`.
 6. In the pull request, write what you ran (exact commands and results) and what you did **not** verify. Claims of a passing check must be true.
