@@ -72,7 +72,7 @@ func TestEntryWorkflow(t *testing.T) {
 	for _, k := range []string{"audit", "drift_issues"} {
 		var vals []string
 		for _, f := range []string{"tofu", "plan", "apply", "comment-ops", "drift", "locks"} {
-			// a workflow without the input is skipped; one with a default of false is not (stricter than yq's `// "-"`)
+			// a workflow without the input is skipped; one with a default of false is not (stricter than the `// "-"` default)
 			if d := at(load(t, wfDir+f+".yml"), "on", "workflow_call", "inputs", k, "default"); d != nil {
 				vals = append(vals, str(d))
 			}

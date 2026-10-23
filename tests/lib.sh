@@ -30,4 +30,11 @@ build_bin() {
   if [ "$#" -eq 0 ] && [ -n "$pre" ] && [ -x "$pre" ]; then cp "$pre" "$dest"; return; fi
   (cd "$root" && go build -o "$dest" "$@" "./cmd/$name")
 }
+# json_str <text>: the text as a JSON string literal, quotes included (escapes \ " and the control characters
+# newline, carriage return and tab), to build a JSON stub with printf
+json_str() {
+  local s=$1
+  s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}; s=${s//$'\r'/\\r}; s=${s//$'\t'/\\t}
+  printf '"%s"' "$s"
+}
 done_tests() { echo; echo "$pass passed, $failn failed"; [ "$failn" -eq 0 ]; }

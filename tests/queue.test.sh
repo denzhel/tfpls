@@ -3,7 +3,6 @@
 # A local bare repository stands in for GitHub; a gh stub reports which runs are still active.
 set -uo pipefail
 export TFPLS_RETRY_SLEEP=0   # retries pause randomly in the scripts under test; the tests do not wait
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'pkill -P $$ 2>/dev/null; rm -rf "$T"' EXIT
 build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
@@ -78,6 +77,5 @@ TFPLS_REMOTE_URL="$T/missing.git" q enter 601 x >"$T/o8" 2>&1; eq "an unreachabl
 BRANCH=main q enter 602 x >"$T/o9" 2>&1; eq "refuses to use main" "$?|$(grep -c refusing "$T/o9")" "0|1"
 q leave 999 never >/dev/null 2>&1; eq "leave without a ticket is a no-op" "$?" 0
 # the wait budget formula is unit-tested in internal/queue (TestBudget)
-eq "action.yml installs the binary, then runs tfpls queue" "$(yq -r '.runs.steps[0].uses' "$here/actions/queue/action.yml")|$(yq -r '.runs.steps[1].run' "$here/actions/queue/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls queue"
 
 done_tests

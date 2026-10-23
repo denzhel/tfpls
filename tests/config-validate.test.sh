@@ -14,7 +14,9 @@ check() {
   if [ "$level" = none ]; then
     [ "$out" = "[]" ] && ok "$name" || bad "$name (expected no problems, got $out)"
   else
-    jq -e --arg l "$level" --arg w "$want" 'any(.[]; .level == $l and (.msg | contains($w)))' <<<"$out" >/dev/null \
+    # one object per line; a message of that level that contains the text (the text is escaped the way the JSON string is)
+    local w=${want//\\/\\\\}; w=${w//\"/\\\"}
+    sed 's/},{/}\n{/g' <<<"$out" | grep -F -e "\"level\":\"$level\",\"msg\":\"" | grep -qF -- "$w" \
       && ok "$name" || bad "$name (wanted $level containing '$want', got $out)"
   fi
 }
@@ -84,6 +86,6 @@ check "unknown key in defaults"                 $'defaults: { nope: 1 }\nstacks:
 
 # a typo only warns: the run is not blocked
 out=$(printf '%s\n' $'stacks:\n  - name: s\n    workspaces: [a]\n    autoapply: always' | "$T/tfpls" validate-config)
-jq -e 'all(.[]; .level == "warning")' <<<"$out" >/dev/null && ok "warnings alone do not stop a run (no error level)" || bad "typo escalated to error"
+[ "$(grep -o '"level":"[a-z]*"' <<<"$out" | sort -u)" = '"level":"warning"' ] && ok "warnings alone do not stop a run (no error level)" || bad "typo escalated to error"
 
 done_tests

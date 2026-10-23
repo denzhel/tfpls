@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tools/onboard: the layouts (folders, var files, separate roots, one root stack), the files it writes (valid workflow and
 # config), a second run changes nothing, a differing workflow is never replaced without a yes or --force, answers through
-# the test hook and through a real terminal under `curl | bash` (pty), no questions and no colours without a terminal,
+# the test hook and (a real terminal under `curl | bash`: internal/onboard TestRealTerminal), no questions and no colours without a terminal,
 # --yes, --dry-run, the optional GitHub step (gh stub, offline otherwise), jokes, a non-writable target, bash 3.2.
 # The program is the Go binary (internal/onboard), built once per run and called through a 2-line sh wrapper.
 # TFPLS_ONBOARD=<path> runs the same checks against another program (for example the previous Bash version).
@@ -36,6 +36,7 @@ chmod +x "$t/bin/gh"; export PATH="$t/bin:$PATH" STUB_LOG="$t/gh.log" STUB_DIR="
 ob() { "$init" "$@" </dev/null 2>&1; }                                     # no terminal: stdout captured, no input
 ans() { local a=$1; shift; printf '%b' "$a" | TFPLS_ONBOARD_TTY=/dev/stdin "$init" "$@" 2>&1; }   # answers via stdin
 snap() { (cd "$1" && find . -path ./.git -prune -o -type f -print | LC_ALL=C sort | while IFS= read -r f; do cksum "$f"; done); }
+lc() { grep -cxF -- "$2" "$1"; }   # lc <file> <line>: how many lines of the file are exactly this text (the files are written by the program, so their text is fixed)
 valid() { [ -x "$t/tfpls" ] || build_bin tfpls "$t/tfpls"; "$t/tfpls" validate-config < "$1"; }
 noop() { # noop <label> <dir> [options]: a second run changes no file and says so
   local d=$1 s1 o; shift; d=$1; shift
@@ -55,9 +56,9 @@ grep -q 'tfpls.*onboarding' <<<"$out" && grep -q '|_______|/' <<<"$out" && ok "t
 grep -q '🔎 Looking around' <<<"$out" && grep -q '🧠 In short' <<<"$out" && grep -q '✅ Checklist' <<<"$out" && ok "an icon per step" || bad "icons"
 grep -q '✔ the caller workflow .github/workflows/tofu.yml (written)' <<<"$out" && grep -q '☐ 1\. One IAM role' <<<"$out" && ok "the checklist shows what is done and what is left" || bad "done/left: $out"
 grep -q 'no terminal: no questions' <<<"$out" && ! grep -qE '\[Y/n\]|\[y/N\]' <<<"$out" && ok "no questions without a terminal" || bad "prompts without a terminal: $out"
-eq "uses the entry workflow at @v0" "$(yq -r .jobs.tofu.uses "$t/a/.github/workflows/tofu.yml")" "denzhel/tfpls/.github/workflows/tofu.yml@v0"
-eq "secrets inherited" "$(yq -r .jobs.tofu.secrets "$t/a/.github/workflows/tofu.yml")" inherit
-eq "no with: block for the default runner" "$(yq -r '.jobs.tofu.with // "none"' "$t/a/.github/workflows/tofu.yml")" none
+eq "uses the entry workflow at @v0" "$(lc "$t/a/.github/workflows/tofu.yml" "    uses: denzhel/tfpls/.github/workflows/tofu.yml@v0")" 1
+eq "secrets inherited" "$(lc "$t/a/.github/workflows/tofu.yml" "    secrets: inherit")" 1
+eq "no with: block for the default runner" "$(grep -c '^    with:' "$t/a/.github/workflows/tofu.yml")" 0
 if command -v actionlint >/dev/null; then actionlint "$t/a/.github/workflows/tofu.yml" && ok "generated workflow passes actionlint" || bad "generated workflow passes actionlint"; fi
 noop - "$t/a"
 
@@ -65,22 +66,22 @@ noop - "$t/a"
 mkdir -p "$t/v/vars"; printf 'terraform {\n  backend "s3" {}\n}\n' > "$t/v/main.tf"; touch "$t/v/vars/dev.tfvars" "$t/v/vars/prod.tfvars" "$t/v/vars/terraform.tfvars"
 git init -q "$t/v"; git -C "$t/v" remote add origin https://github.com/al-ice/my.repo.git
 out=$(ob "$t/v"); c="$t/v/.tfpls.yml"
-eq "var files become workspaces of one stack" "$(yq -r '.stacks[0].workspaces | join(",")' "$c")" "dev,prod"
-eq "var_file template" "$(yq -r '.stacks[0].var_file' "$c")" 'vars/{workspace}.tfvars'
-eq "a var file selects only its workspace" "$(yq -r '.stacks[0].workspace_paths[0]' "$c")" 'vars/{workspace}.tfvars'
+eq "var files become workspaces of one stack" "$(lc "$c" "    workspaces: [dev, prod]")|$(grep -c '^  - ' "$c")" "1|1"
+eq "var_file template" "$(lc "$c" '    var_file: "vars/{workspace}.tfvars"')" 1
+eq "a var file selects only its workspace" "$(grep -cF '    workspace_paths: ["vars/{workspace}.tfvars"]' "$c")" 1
 eq "the var-file config is valid" "$(valid "$c")" "[]"
 eq "trust policy shows both subject forms from the remote" "$(grep -c -e '"repo:al-ice/my.repo:\*"' -e '"repo:al-ice@\*/my.repo@\*:\*"' <<<"$out")" 1
 ! grep -q 'auto_apply: never' "$c" && ok "no per-workspace no-op lines" || bad "no-op lines"
 noop - "$t/v"
 mkdir -p "$t/vr"; printf 'terraform {\n  backend "s3" {}\n}\n' > "$t/vr/main.tf"; touch "$t/vr/dev.tfvars" "$t/vr/prod.tfvars"; ob "$t/vr" >/dev/null
-eq "var files in the root: the paths have no ./ (a change to dev.tfvars plans only dev)" "$(yq -r '.stacks[0].workspace_paths[0]' "$t/vr/.tfpls.yml")" '{workspace}.tfvars'
+eq "var files in the root: the paths have no ./ (a change to dev.tfvars plans only dev)" "$(grep -cF '    workspace_paths: ["{workspace}.tfvars"]' "$t/vr/.tfpls.yml")" 1
 
 # ---- layout 3: separate root modules with a backend, modules watched
 mkdir -p "$t/ev/envs/dev" "$t/ev/envs/prod" "$t/ev/modules/net"
 for e in dev prod; do printf 'terraform {\n  backend "s3" {}\n}\nmodule "n" {\n  source = "../../modules/net"\n}\nmodule "x" {\n  source = "../../../outside"\n}\n' > "$t/ev/envs/$e/main.tf"; done
 out=$(ob "$t/ev"); c="$t/ev/.tfpls.yml"
-eq "each backend directory is a stack on default" "$(yq -r '[.stacks[] | .name + ":" + .dir + ":" + (.workspaces | join(","))] | join(" ")' "$c")" "envs-dev:envs/dev:default envs-prod:envs/prod:default"
-eq "watch comes from the relative module sources" "$(yq -r '.stacks[0].watch | join(",")' "$c")" "modules/net"
+eq "each backend directory is a stack on default" "$(grep -E '^  - ' "$c" | sed 's/ *watch: \[[^]]*\]//; s/,  *}/ }/' | tr '\n' '|')" "  - { name: envs-dev, dir: envs/dev, workspaces: [default] }|  - { name: envs-prod, dir: envs/prod, workspaces: [default] }|"
+eq "watch comes from the relative module sources" "$(grep -cF 'dir: envs/dev, workspaces: [default], watch: [modules/net] }' "$c")" 1
 eq "the envs config is valid" "$(valid "$c")" "[]"
 grep -q 'Modules     local: modules/net' <<<"$out" && ok "module relations are summarised" || bad "modules row: $out"
 noop - "$t/ev"
@@ -113,9 +114,9 @@ TF
 printf 'provider "cloudflare" {}\n' > "$r/providers.tf"; printf 'resource "cloudflare_zone" "z" {\n  name = "example.com"\n}\n' > "$r/zones.tf"; echo x > "$r/workers/w.js"
 cp -R "$r" "$t/edge-dry"
 out=$(ob "$r"); eq "the one root stack: exit 0" "$?" 0; c="$r/.tfpls.yml"
-eq "one stack named after the repository, in ., on the default workspace" "$(yq -r '[.stacks[] | .name + ":" + .dir + ":" + (.workspaces | join(","))] | join(" ")' "$c")" "edge-infra:.:default"
+eq "one stack named after the repository, in ., on the default workspace" "$(grep -E '^(  - |    (dir|workspaces):)' "$c" | tr '\n' '|')" "  - name: edge-infra|    dir: .|    workspaces: [default]|"
 eq "the one-root-stack config is valid" "$(valid "$c")" "[]"
-eq "docs and the workflow itself plan nothing" "$(yq -r '.stacks[0].ignore | join(" ")' "$c")" '**/*.md docs/** .github/** LICENSE* .gitignore'
+eq "docs and the workflow itself plan nothing" "$(grep -c '^    ignore: \["\*\*/\*.md", "docs/\*\*", ".github/\*\*", "LICENSE\*", ".gitignore"\]   # changes here plan nothing$' "$c")" 1
 grep -q 'one root stack' <<<"$out" && grep -q 'Cloudflare R2' <<<"$out" && grep -q 'no AWS: no IAM role needed' <<<"$out" && ok "understands the root stack, R2 and a non-AWS provider" || bad "understanding: $out"
 grep -q 'gh secret set TFPLS_ENV_JSON' <<<"$out" && grep -q '"CLOUDFLARE_API_TOKEN"' <<<"$out" && grep -q '"AWS_ACCESS_KEY_ID": "<R2 access key ID>"' <<<"$out" && ok "credentials guidance: TFPLS_ENV_JSON with the Cloudflare token and the R2 keys" || bad "R2 guidance: $out"
 ! grep -q 'TFPLS_ROLE_ARN' <<<"$out" && ! grep -qi 'trust policy' <<<"$out" && ok "no AWS role steps for a repository without AWS" || bad "role steps shown: $out"
@@ -127,13 +128,13 @@ noop - "$r"
 s1=$(snap "$t/edge-dry"); out=$(ob --dry-run "$t/edge-dry")
 [ "$(snap "$t/edge-dry")" = "$s1" ] && grep -q '+  - name: edge-infra' <<<"$out" && grep -q '+name: tofu' <<<"$out" && grep -q 'nothing was written' <<<"$out" && ok "--dry-run shows the new files as diffs and writes nothing" || bad "dry run: $out"
 out=$(ob --dry-run "$r"); grep -q 'nothing would change' <<<"$out" && ok "--dry-run on an onboarded repository: nothing would change" || bad "dry run up to date: $out"
-out=$(ans 'n\nweb-edge\ny\n' "$t/edge-dry"); eq "answers via stdin (no to GitHub, a stack name, yes to the files)" "$(yq -r '.stacks[0].name' "$t/edge-dry/.tfpls.yml")" web-edge
+out=$(ans 'n\nweb-edge\ny\n' "$t/edge-dry"); eq "answers via stdin (no to GitHub, a stack name, yes to the files)" "$(lc "$t/edge-dry/.tfpls.yml" "  - name: web-edge")" 1
 grep -q 'Name of the stack (shown in comments, used by /tofu apply <name>) \[edge-infra\] web-edge' <<<"$out" && ok "the question shows its default and the answer" || bad "question: $out"
 # the root module has a backend and so do other directories: the root stack ignores them, they are stacks of their own
 mkdir -p "$t/mix/bootstrap"; cp "$r/versions.tf" "$t/mix/"; printf 'terraform {\n  backend "s3" {\n    region = "eu-north-1"\n    use_lockfile = true\n  }\n}\n' > "$t/mix/bootstrap/main.tf"
 ob "$t/mix" >/dev/null; c="$t/mix/.tfpls.yml"
-eq "root plus another root module: two stacks" "$(yq -r '[.stacks[] | .name + ":" + .dir] | join(" ")' "$c")" "mix:. bootstrap:bootstrap"
-eq "the root stack ignores the other root module" "$(yq -r '.stacks[0].ignore[-1]' "$c")" 'bootstrap/**'
+eq "root plus another root module: two stacks" "$(grep -E '^  - ' "$c" | tr '\n' '|')" "  - name: mix|  - { name: bootstrap, dir: bootstrap, workspaces: [default] }|"
+eq "the root stack ignores the other root module" "$(grep -cF ', ".gitignore", "bootstrap/**"]   # changes here plan nothing' "$c")" 1
 eq "that config is valid" "$(valid "$c")" "[]"
 
 # ---- a comment-only config is a warning
@@ -142,7 +143,7 @@ grep -q '! .*only comments' <<<"$out" && ! grep -q '✔ .tfpls.yml' <<<"$out" &&
 
 # ---- the push trigger names the default branch even when onboarding runs on a feature branch
 git init -q -b main "$t/fb"; mkdir -p "$t/fb/workspaces/dev"; git -C "$t/fb" -c user.email=a@b -c user.name=a commit -q --allow-empty -m x; git -C "$t/fb" checkout -q -b add-pipeline
-ob "$t/fb" >/dev/null; eq "a feature branch does not become the push trigger" "$(yq -r '.on.push.branches[0]' "$t/fb/.github/workflows/tofu.yml")" main
+ob "$t/fb" >/dev/null; eq "a feature branch does not become the push trigger" "$(lc "$t/fb/.github/workflows/tofu.yml" "  push: { branches: [main] }")" 1
 out=$(ob --force --create-workspaces "$t/fb"); rc=$?; [ $rc -eq 2 ] && grep -q 'unknown option: --create-workspaces' <<<"$out" && ok "--create-workspaces is rejected" || bad "flag: rc=$rc $out"
 out=$(ob --force "$t/v"); grep -q 'tofu workspace new' <<<"$out" && ! grep -q -e '--create-workspaces' <<<"$out" && ok "the hint for missing workspaces names tofu workspace new" || bad "hint"
 
@@ -152,20 +153,20 @@ out=$(ob "$t/r"); ! grep -q 'pwned' <<<"$out" && grep -q 'OWNER/REPO' <<<"$out" 
 mkdir -p "$t/w/workspaces/ok" "$t/w/workspaces/b ad"; out=$(ob "$t/w"); grep -q 'workspace(s) in workspaces/: ok' <<<"$out" && grep -q 'is skipped' <<<"$out" && ok "odd workspace names are skipped" || bad "names: $out"
 
 # ---- the runner, and a differing workflow: shown as a diff, replaced only with --force or a yes
-ob --force --runs-on ubuntu-slim "$t/a" >/dev/null; eq "--runs-on changes the runner" "$(yq -r .jobs.tofu.with.runs_on "$t/a/.github/workflows/tofu.yml")" ubuntu-slim
+ob --force --runs-on ubuntu-slim "$t/a" >/dev/null; eq "--runs-on changes the runner" "$(lc "$t/a/.github/workflows/tofu.yml" "    with: { runs_on: ubuntu-slim }")" 1
 grep -q $'\033' <<<"$out" && bad "colors in piped output" || ok "no colors when the output is not a terminal"
 before=$(cat "$t/a/.github/workflows/tofu.yml"); out=$(ob "$t/a"); rc=$?
 [ $rc -eq 0 ] && [ "$(cat "$t/a/.github/workflows/tofu.yml")" = "$before" ] && ok "a differing workflow is not overwritten without a yes" || bad "overwritten: rc=$rc"
 grep -q -- '-    with: { runs_on: ubuntu-slim }' <<<"$out" && grep -q -e '--force' <<<"$out" && grep -q '.tfpls.yml is never overwritten' <<<"$out" && ok "the difference is shown as a diff, with the way to replace it" || bad "diff: $out"
 out=$(ans 'n\n' "$t/a"); [ "$(cat "$t/a/.github/workflows/tofu.yml")" = "$before" ] && grep -q 'Replace .github/workflows/tofu.yml with the recommended caller? \[y/N\] n' <<<"$out" && ok "answered no: kept" || bad "no: $out"
-out=$(ans 'y\n' "$t/a"); eq "answered yes: replaced" "$(yq -r '.jobs.tofu.with // "none"' "$t/a/.github/workflows/tofu.yml")" none
-ob --force --runs-on '["self-hosted","linux"]' "$t/a" >/dev/null; eq "a JSON array of labels is passed as a string" "$(yq -r .jobs.tofu.with.runs_on "$t/a/.github/workflows/tofu.yml")" '["self-hosted","linux"]'
+out=$(ans 'y\n' "$t/a"); eq "answered yes: replaced" "$(grep -c '^    with:' "$t/a/.github/workflows/tofu.yml" | sed 's/^0$/none/')" none
+ob --force --runs-on '["self-hosted","linux"]' "$t/a" >/dev/null; eq "a JSON array of labels is passed as a string" "$(lc "$t/a/.github/workflows/tofu.yml" "    with: { runs_on: '[\"self-hosted\",\"linux\"]' }")" 1
 if command -v actionlint >/dev/null; then actionlint "$t/a/.github/workflows/tofu.yml" && ok "the labels array passes actionlint" || bad "labels array: actionlint"; fi
 ob --runs-on 'x y' "$t/a" >/dev/null; eq "an odd runner label is a usage error" "$?" 2
 col=$(FORCE_COLOR=1 "$init" --force "$t/a" 2>&1 </dev/null); grep -q $'\033\[' <<<"$col" && ok "FORCE_COLOR=1 gives colors" || bad "FORCE_COLOR"
 col=$(FORCE_COLOR=1 NO_COLOR=1 "$init" --force "$t/a" 2>&1 </dev/null); grep -q $'\033' <<<"$col" && bad "NO_COLOR ignored" || ok "NO_COLOR wins"
 ob --force "$t/a" >/dev/null; eq "--force overwrites" "$?" 0
-eq "--ref pins" "$(ob --force --ref v0.2.3 "$t/a" >/dev/null; yq -r .jobs.tofu.uses "$t/a/.github/workflows/tofu.yml" | sed 's/.*@//')" v0.2.3
+eq "--ref pins" "$(ob --force --ref v0.2.3 "$t/a" >/dev/null; grep '^    uses: ' "$t/a/.github/workflows/tofu.yml" | sed 's/.*@//')" v0.2.3
 printf 'overrides: {}\n' > "$t/a/.tfpls.yml"; out=$(ob --force "$t/a")
 eq "keeps an existing config, even with --force" "$(cat "$t/a/.tfpls.yml")" "overrides: {}"
 grep -q "left as it is" <<<"$out" && ok "says the existing config is left alone" || bad "existing config note"
@@ -174,67 +175,6 @@ grep -q "left as it is" <<<"$out" && ok "says the existing config is left alone"
 mkdir -p "$t/q/workspaces/dev"; out=$(ans 'n\n' "$t/q")
 [ ! -e "$t/q/.github/workflows/tofu.yml" ] && grep -q 'Does that look right? Write the new file(s)? \[Y/n\] n' <<<"$out" && ok "answered no: nothing is written" || bad "no to the files: $out"
 out=$(ans 'n\n' --yes "$t/q"); [ -f "$t/q/.github/workflows/tofu.yml" ] && ! grep -qE '\[Y/n\]|\[y/N\]' <<<"$out" && ok "--yes asks nothing and takes the defaults" || bad "--yes: $out"
-if command -v python3 >/dev/null; then
-  pty() { # pty <answers separated by |> <args...>: `cat onboard | bash -s -- args` in a pseudo-terminal, as curl | bash on a laptop
-    # (PTY_CMD runs that command instead; PTY_DEADLINE and PTY_GRACE are seconds: how long to let it run, how long to wait for it to exit)
-    ANSWERS=$1 PTY_CMD="${PTY_CMD:-}" python3 - "$init" "${@:2}" <<'PY'
-import os, pty, select, signal, sys, time
-script, args = sys.argv[1], sys.argv[2:]
-answers = os.environ["ANSWERS"].split("|") if os.environ["ANSWERS"] else []
-cmd = os.environ.get("PTY_CMD", "")
-deadline = float(os.environ.get("PTY_DEADLINE") or 60)
-grace = float(os.environ.get("PTY_GRACE") or 10)
-pid, fd = pty.fork()
-if pid == 0:
-    os.environ["NO_COLOR"] = "1"
-    if cmd:
-        os.execvp("bash", ["bash", "-c", cmd])
-    os.execvp("bash", ["bash", "-c", 'cat "$0" | bash -s -- "$@"', script] + args)
-out, sent = b"", 0
-def pump(wait):  # read what the terminal has, answer each question once; False on EOF/EIO (the child closed the terminal)
-    global out, sent
-    if fd in select.select([fd], [], [], wait)[0]:
-        try:
-            chunk = os.read(fd, 4096)
-        except OSError:
-            return False
-        if not chunk:
-            return False
-        out += chunk
-        while sent < min(len(answers), out.count(b"[Y/n]") + out.count(b"[y/N]")):
-            os.write(fd, answers[sent].encode() + b"\n"); sent += 1
-    return True
-end = time.time() + deadline
-while time.time() < end and pump(0.1):
-    pass
-# The terminal reports EOF as soon as the child closes it, a few milliseconds BEFORE the child can be reaped: wait for the
-# exit before calling it stuck (killing a child that was only finishing made this test fail now and then on a busy runner).
-status, stop = None, time.time() + grace
-while status is None and time.time() < stop:
-    done, st = os.waitpid(pid, os.WNOHANG)
-    if done:
-        status = st
-    else:
-        pump(0.05)
-if status is None:
-    os.kill(pid, signal.SIGKILL); os.waitpid(pid, 0); out += b"\nKILLED (waiting for an answer)"
-else:
-    while pump(0.2):  # what is left in the terminal after the exit
-        pass
-    if os.waitstatus_to_exitcode(status) != 0:
-        out += ("\nEXIT %d" % os.waitstatus_to_exitcode(status)).encode()
-sys.stdout.write(out.decode("utf-8", "replace"))
-PY
-  }
-  mkdir -p "$t/p/workspaces/dev"; out=$(pty 'n' --no-jokes "$t/p")
-  grep -q 'Write the new file(s)? \[Y/n\]' <<<"$out" && [ ! -e "$t/p/.github/workflows/tofu.yml" ] && ! grep -q KILLED <<<"$out" && ok "under curl | bash in a terminal the question is read from /dev/tty (answered no: nothing written)" || bad "pty: $out"
-  out=$(pty '' --yes --no-jokes "$t/p"); [ -f "$t/p/.github/workflows/tofu.yml" ] && ! grep -q '\[Y/n\]' <<<"$out" && ok "--yes in a terminal: no question, files written" || bad "pty --yes: $out"
-  # the helper itself: a child that closes its terminal and is still exiting is waited for, not killed (the race behind the old flake) ...
-  out=$(PTY_CMD='exec >&- 2>&- </dev/null; sleep 0.4; exit 0' pty '' x); ! grep -qE 'KILLED|EXIT' <<<"$out" && ok "pty helper: a child that closed its terminal and is still exiting is waited for" || bad "pty helper killed a finishing child: $out"
-  # ... a child that really hangs is still killed and marked, and a failing child reports its exit status
-  out=$(PTY_CMD='sleep 30' PTY_DEADLINE=1 PTY_GRACE=1 pty '' x); grep -q KILLED <<<"$out" && ok "pty helper: a child that really hangs is killed and marked" || bad "pty helper did not mark a hanging child: $out"
-  out=$(PTY_CMD='echo hi; exit 3' pty '' x); grep -q 'EXIT 3' <<<"$out" && ok "pty helper: a failing child reports its exit status" || bad "pty helper hid an exit status: $out"
-fi
 
 # ---- an existing tfpls caller under another name is updated, never doubled; another pipeline is asked about, never deleted
 mkdir -p "$t/dup/workspaces/dev" "$t/dup/.github/workflows"; ob "$t/dup" >/dev/null; mv "$t/dup/.github/workflows/tofu.yml" "$t/dup/.github/workflows/infra.yml"
@@ -267,9 +207,9 @@ mkdir -p "$t/e/workspaces"; ob "$t/e" >/dev/null; eq "an empty workspaces/ folde
 # ---- checks: unknown flags, default branch, not a git repo, another workflow
 ob --nope "$t/a" >/dev/null; eq "an unknown option is a usage error" "$?" 2
 out=$(ob --force "$t/a"); grep -q 'not a git repository' <<<"$out" && ok "warns when not a git repository" || bad "git warning"
-eq "main without git" "$(yq -r '.on.push.branches[0]' "$t/a/.github/workflows/tofu.yml")" main
+eq "main without git" "$(lc "$t/a/.github/workflows/tofu.yml" "  push: { branches: [main] }")" 1
 git init -q -b trunk "$t/g"; mkdir -p "$t/g/workspaces/dev"; out=$(ob "$t/g")
-eq "the default branch is read from git" "$(yq -r '.on.push.branches[0]' "$t/g/.github/workflows/tofu.yml")" trunk
+eq "the default branch is read from git" "$(lc "$t/g/.github/workflows/tofu.yml" "  push: { branches: [trunk] }")" 1
 ! grep -q 'not a git repository' <<<"$out" && ok "no git warning inside a repository" || bad "git warning in repo"
 mkdir -p "$t/h/.github/workflows" "$t/h/workspaces/dev"; printf 'name: terraform\non: push\n' > "$t/h/.github/workflows/terraform.yml"
 out=$(ob "$t/h"); grep -q 'terraform.yml looks like another' <<<"$out" && ok "warns about another tofu/terraform workflow" || bad "other workflow warning"

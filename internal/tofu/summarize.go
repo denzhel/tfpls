@@ -115,7 +115,7 @@ func additive(planDoc []byte) bool {
 	return true
 }
 
-// compact is jq -c: JSON without spaces and without HTML escaping.
+// compact is compact JSON: JSON without spaces and without HTML escaping.
 func compact(v any) string {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)

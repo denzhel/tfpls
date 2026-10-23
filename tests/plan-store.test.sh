@@ -132,7 +132,9 @@ echo "$*" >> "$GH_LOG"
 printf '%s' "$FAKE_ARTIFACTS"
 STUB
 chmod +x "$fb3/gh"
-many=$(jq -cn '{artifacts: ([range(0;40) | {id:(1000+.),expired:false,created_at:"2026-03-01T00:00:00Z",workflow_run:{id:(5000+.),repository_id:100,head_repository_id:200,head_branch:"main"}}] + [{id:2,expired:false,created_at:"2026-02-01T00:00:00Z",workflow_run:{id:22,repository_id:100,head_repository_id:100,head_branch:"main"}}])}')
+many='{"artifacts":['
+for i in $(seq 0 39); do many="$many{\"id\":$((1000 + i)),\"expired\":false,\"created_at\":\"2026-03-01T00:00:00Z\",\"workflow_run\":{\"id\":$((5000 + i)),\"repository_id\":100,\"head_repository_id\":200,\"head_branch\":\"main\"}},"; done
+many="$many{\"id\":2,\"expired\":false,\"created_at\":\"2026-02-01T00:00:00Z\",\"workflow_run\":{\"id\":22,\"repository_id\":100,\"head_repository_id\":100,\"head_branch\":\"main\"}}]}"
 T_LOG=$(mktemp)
 out=$(GH_LOG="$T_LOG" PATH="$fb3:$PATH" FAKE_ARTIFACTS="$many" tfpls_lookup o/r some-plan)
 [ "$out" = "2 22" ] && ok "the real plan is found behind 40 foreign artifacts" || bad "behind 40 foreign: '$out'"

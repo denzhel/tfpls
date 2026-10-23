@@ -14,7 +14,7 @@ import (
 // J is a JSON object.
 type J = map[string]any
 
-// alt is jq's `a // b`: b when a is null or false.
+// alt is `a // b`: b when a is null or false.
 func alt(a, b any) any {
 	if a == nil || a == false {
 		return b
@@ -110,7 +110,7 @@ func orderedOverrides(m J, keys []string) []kv {
 	return out
 }
 
-// mergeOverrides is jq's `$top + $own`: the keys of top first, a key of own replaces the value in place, new keys follow.
+// mergeOverrides is `$top + $own`: the keys of top first, a key of own replaces the value in place, new keys follow.
 func mergeOverrides(top, own []kv) []kv {
 	out := append([]kv{}, top...)
 	for _, o := range own {

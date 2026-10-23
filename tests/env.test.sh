@@ -31,7 +31,7 @@ case "$OUT" in *"::add-mask::apply"*|*"::add-mask::us-east-1"*|*"::add-mask::abc
 case "$OUT" in *"::add-mask::long-secret-token"*) ok "long secret still masked";; *) bad "long secret masked: $OUT";; esac
 case "$OUT" in *"credentials: env"*) ok "credentials notice stays readable";; *) bad "notice: $OUT";; esac
 
-run JSON="$(jq -cn --arg v $'line1\nline2' '{PEM:$v}')"
+run JSON='{"PEM":"line1\nline2"}'
 [ "$(sed -n '/^PEM<</,/^tfpls_/p' "$T/env" | sed '1d;$d' | tr '\n' '|')" = "line1|line2|" ] && ok "multi-line values survive" || bad "multi-line value"
 
 run JSON=""

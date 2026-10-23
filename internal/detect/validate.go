@@ -47,7 +47,7 @@ func typeOf(v any) string {
 	return "number"
 }
 
-// interp renders a value as jq string interpolation does: a string as is, anything else as JSON.
+// interp renders a value as the string interpolation of the former shell version did: a string as is, anything else as JSON.
 func interp(v any) string {
 	if s, ok := v.(string); ok {
 		return s

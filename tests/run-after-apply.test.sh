@@ -89,24 +89,23 @@ chmod +x "$T/bin/tofu" "$T/bin/git" "$T/bin/gh"
 
 # the reviewed plan saved for the pull request's head commit (unencrypted: the run has no key)
 mkdir -p "$T/saved"; echo reviewed > "$T/saved/tfplan"
-jq -n --arg sha "$SHA" '{name:"terraform/dev",dir:"stack",tofu_version:"1.13.1",tree:"tree0123456789",head_sha:$sha,targets:"",created_at:"2026-10-01T00:00:00Z"}' > "$T/meta.json"
+printf '{"name":"terraform/dev","dir":"stack","tofu_version":"1.13.1","tree":"tree0123456789","head_sha":"%s","targets":"","created_at":"2026-10-01T00:00:00Z"}\n' "$SHA" > "$T/meta.json"
 ( unset PLAN_ENCRYPTION_KEY; tfpls_pack "$T/saved" "$T/art" "$T/meta.json" >/dev/null ) && [ -s "$T/art/plan.tgz" ] || bad "could not pack the fixture plan"
 
 # ---- the pull request's comments
 # c <id> <user type> <status> <run link> [superseded]: a comment of terraform/dev laid out as run.sh posts it
 c() {
-  jq -cn --argjson id "$1" --arg type "$2" --arg s "$3" --arg url "$4" --arg sup "${5:-}" '
-    (if $s == "applied" then "✅ [dev](\($url)) apply logs" else "📝 [dev](\($url)) plan logs" end) as $h
-    | {id: $id, user: {type: $type}, html_url: "https://github.com/o/r/pull/7#issuecomment-\($id)",
-       body: (["<!-- tfpls:terraform/dev -->"]
-              + (if $sup != "" then ["> 🔁 **Superseded** by https://github.com/o/r/pull/7#issuecomment-1. The plan below is kept for reference only."] else [] end)
-              + ["<!-- tfpls-status: \($s) -->", "**x**", "### \($h)", ""] | join("\n"))}'
+  local h sup=""
+  if [ "$3" = applied ]; then h="✅ [dev]($4) apply logs"; else h="📝 [dev]($4) plan logs"; fi
+  [ -n "${5:-}" ] && sup='> 🔁 **Superseded** by https://github.com/o/r/pull/7#issuecomment-1. The plan below is kept for reference only.\n'
+  # the body is the marker line, the superseded note (if any), the status line, a bold line and the heading, newline-separated
+  printf '{"id":%s,"user":{"type":"%s"},"html_url":"https://github.com/o/r/pull/7#issuecomment-%s","body":"<!-- tfpls:terraform/dev -->\\n%s<!-- tfpls-status: %s -->\\n**x**\\n### %s\\n"}' "$1" "$2" "$1" "$sup" "$3" "$h"
 }
 page() { local IFS=,; printf '[%s]\n' "$*"; }
 P1=$(c 101 Bot planned "$RUN/100" superseded)    # the pull request plan
 A1=$(c 102 Bot applied "$RUN/111")               # /tofu apply
 HUMAN='{"id":103,"user":{"type":"User"},"html_url":"https://github.com/o/r/pull/7#issuecomment-103","body":"applied, merging"}'
-OTHER=$(jq -cn '{id: 104, user: {type: "Bot"}, html_url: "x", body: "<!-- tfpls:terraform/prod -->\n<!-- tfpls-status: planned -->\n**x**"}')
+OTHER='{"id":104,"user":{"type":"Bot"},"html_url":"x","body":"<!-- tfpls:terraform/prod -->\n<!-- tfpls-status: planned -->\n**x**"}'
 page "$P1" "$HUMAN" "$A1" "$OTHER" > "$T/consumed.json"
 page "$P1" "$HUMAN" > "$T/planned.json"
 
@@ -147,7 +146,7 @@ grep -q "already applied by \`/tofu apply\` ($RUN/111)" "$T/summary" && ok "cons
 eq "consumed: the outputs say that no reviewed plan was used, and why there are no changes" "$(grep '^reviewed=' "$T/gho")|$(grep '^summary=' "$T/gho")" 'reviewed=false|summary=Already applied by `/tofu apply`; nothing changed since.'
 
 # the comments are paginated: the apply comment can be on a later page
-{ page "$P1" "$(for i in $(seq 1 99); do jq -cn --argjson id "$((200 + i))" '{id: $id, user: {type: "User"}, body: "comment"}'; done | paste -sd, -)"; page "$(c 400 Bot applied "$RUN/111")"; } > "$T/paged.json"
+{ page "$P1" "$(for i in $(seq 1 99); do printf '{"id":%s,"user":{"type":"User"},"body":"comment"}\n' "$((200 + i))"; done | paste -sd, -)"; page "$(c 400 Bot applied "$RUN/111")"; } > "$T/paged.json"
 go STUB_STALE=1 STUB_COMMENTS="$T/paged.json"
 eq "consumed, the apply comment on the second page: compact comment, nothing fetched or applied" "$(st)|$(compact)|$(fetched)|$(applied)" "no-changes|1|0|"
 

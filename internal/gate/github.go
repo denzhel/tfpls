@@ -17,7 +17,7 @@ type ghFunc func(args ...string) (string, error)
 // str: a JSON string value, or "" for anything else
 func str(v any) string { s, _ := v.(string); return s }
 
-// interp: a value as jq's string interpolation "\(.x)" prints it (null -> "null")
+// interp: a value as string interpolation "\(.x)" prints it (null -> "null")
 func interp(v any) string {
 	switch x := v.(type) {
 	case string:
@@ -29,7 +29,7 @@ func interp(v any) string {
 	return string(b)
 }
 
-// alt: jq's `.x // def`: null and false give the default
+// alt: `.x // def`: null and false give the default
 func alt(v any, def string) string {
 	if v == nil || v == false {
 		return def

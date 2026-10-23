@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Tests for `tfpls approvals`: check (modes), who counts (write access) and enforce (per-workspace policy)
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
-rev() { jq -cn --arg u "$1" --arg s "$2" --arg c "$3" --arg t "${4:-2026-10-10T10:00:00Z}" '{user:{login:$u,type:"User"},state:$s,commit_id:$c,submitted_at:$t}'; }
-mk() { printf '%s\n' "$@" | jq -s '.' > "$T/r.json"; }
+rev() { printf '{"user":{"login":"%s","type":"User"},"state":"%s","commit_id":"%s","submitted_at":"%s"}\n' "$1" "$2" "$3" "${4:-2026-10-10T10:00:00Z}"; }
+mk() { ( IFS=,; printf '[%s]\n' "$*" ) > "$T/r.json"; }   # the review objects as one JSON array
 chk() { "$T/tfpls" approvals check "$T/r.json" HEAD "$1" "$2"; echo "rc=$?"; }
 
 # ---- approvals check
@@ -87,8 +86,7 @@ mk "$(rev bob APPROVED HEAD)"
 o=$(enf "$e6" STUB_PERMS="bob:fail"); eq "a failed permission lookup does not count" "$(tail -1 <<<"$o")|$(grep -c 'permission could not be checked' <<<"$o")" "rc=1|1"
 mk "$(rev bob APPROVED HEAD 2026-10-10T10:00:00Z)" "$(rev bob APPROVED HEAD 2026-10-10T11:00:00Z)" "$(rev ann APPROVED HEAD)"
 : > "$T/calls"; enf "$e6" STUB_LOG="$T/calls" >/dev/null; eq "three reviews by two people make two lookups" "$(wc -l < "$T/calls" | tr -d ' ')" 2
-jq -cn '{user:{login:"github-actions[bot]",type:"Bot"},state:"APPROVED",commit_id:"HEAD",submitted_at:"2026-10-10T10:00:00Z"}' > "$T/bot.json"; jq -cn '{user:null,state:"APPROVED",commit_id:"HEAD",submitted_at:"2026-10-10T10:00:00Z"}' > "$T/ghost.json"
-printf '%s\n' "$(cat "$T/bot.json")" "$(cat "$T/ghost.json")" | jq -s '.' > "$T/r.json"; : > "$T/calls"
+mk '{"user":{"login":"github-actions[bot]","type":"Bot"},"state":"APPROVED","commit_id":"HEAD","submitted_at":"2026-10-10T10:00:00Z"}' '{"user":null,"state":"APPROVED","commit_id":"HEAD","submitted_at":"2026-10-10T10:00:00Z"}'; : > "$T/calls"
 eq "a bot and a deleted user never count and are not looked up" "$(enf "$e6" STUB_LOG="$T/calls" | tail -1)|$(wc -l < "$T/calls" | tr -d ' ')" "rc=1|0"
 mk "$(rev a_b APPROVED HEAD)"; : > "$T/calls"; enf "$e6" STUB_LOG="$T/calls" >/dev/null
 eq "a login with an underscore is looked up" "$(cat "$T/calls")" "a_b"
@@ -105,6 +103,5 @@ eq "another approver still counts" "$(enf "$e1" STUB_PERMS="bob:write,carol:writ
 
 for bad_e in '' 'not json' '[]' '{}'; do eq "no usable rules ('$bad_e') refuse instead of passing" "$(enf "$bad_e" | tail -1)" "rc=1"; done
 
-eq "action.yml installs the binary, then runs tfpls approvals rules and enforce" "$(yq -r '[.runs.steps[0].uses, .runs.steps[1].run, .runs.steps[2].run] | join("|")' "$here/actions/approvals/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls approvals rules|tfpls approvals enforce"
 
 done_tests

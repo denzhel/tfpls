@@ -5,7 +5,6 @@
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
-F="$here/actions/finish/action.yml"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
 # pick [VAR=value ...]: run the script in an empty environment; prints rc=<status>; the log is in $T/log, the step output in $T/out
@@ -31,7 +30,7 @@ eq "and shown nowhere else; the log names the key" "$(shown)|$(grep -c 'key `ONC
 eq "the mask comes before anything else is logged" "$(head -n1 "$T/log")" "::add-mask::https://hook.invalid/oncall"
 eq "the default is masked too" "$(pick DEFAULT_HOOK="$D")|$(grep -cx "::add-mask::$D" "$T/log")" "rc=0|1"
 eq "a % in the URL is escaped for the mask command" "$(pick KEY=ONCALL HOOKS='{"ONCALL": "https://hook.invalid/a%25b"}')|$(url)|$(grep -cx '::add-mask::https://hook.invalid/a%2525b' "$T/log")" "rc=0|https://hook.invalid/a%25b|1"
-eq "a map written over several lines works" "$(pick KEY=TEAMS_WEBHOOK HOOKS="$(jq . <<<"$M")")|$(url)" "rc=0|https://hook.invalid/teams"
+eq "a map written over several lines works" "$(pick KEY=TEAMS_WEBHOOK HOOKS="$(printf '{\n  "ONCALL": "https://hook.invalid/oncall",\n  "TEAMS_WEBHOOK": "https://hook.invalid/teams",\n  "SLACK_WEBHOOK": "https://hook.invalid/in-map"\n}')")|$(url)" "rc=0|https://hook.invalid/teams"
 eq "spaces around a URL are dropped" "$(pick KEY=ONCALL HOOKS='{"ONCALL": " https://hook.invalid/sp \n"}')|$(url)" "rc=0|https://hook.invalid/sp"
 eq "exactly one output line" "$(grep -c . "$T/out")" 1
 # ---- negative cases: a warning, nothing sent, the job goes on, and no URL in the log
@@ -46,14 +45,5 @@ eq "a URL with a line break inside cannot add outputs" "$(pick KEY=ONCALL HOOKS=
 eq "a default that is not a URL: warning" "$(pick DEFAULT_HOOK='not a url')|$(url)|$(grep -c '^::warning::the secret SLACK_WEBHOOK is not an http(s) URL' "$T/log")" "rc=0||1"
 eq "a key with odd characters is not echoed raw into a workflow command" "$(pick KEY=$'X\n::error::y' HOOKS="$M")|$(grep -c '^::error::' "$T/log")|$(warns)" "rc=0|0|1"
 
-# ---- the wiring: finish picks the webhook, then notify-slack posts to it
-eq "finish reads the key from the entry and the two secrets from its inputs" \
-  "$(yq -r '.runs.steps[] | select(.id == "hook") | [.env.KEY, .env.DEFAULT_HOOK, .env.HOOKS, .run] | join("|")' "$F")" \
-  '${{ fromJSON(inputs.entry).notify_secret }}|${{ inputs.webhook }}|${{ inputs.webhooks }}|tfpls finish webhook'
-eq "notify-slack posts to the picked webhook" "$(yq -r '.runs.steps[] | select((.uses // "") | test("actions/notify-slack@")) | .with.webhook' "$F")" '${{ steps.hook.outputs.url }}'
-eq "the binary is installed first: " "$(yq -r '.runs.steps[0].uses' "$F")" "denzhel/tfpls/actions/bin@main"
-eq "the webhook is picked next, and only when there is something to send" \
-  "$(yq -r '[.runs.steps[] | (.id // .uses // "-")] | .[1:3] | join(" ")' "$F")|$(yq -r '.runs.steps[1].if' "$F")" \
-  "hook denzhel/tfpls/actions/notify-slack@main|always() && inputs.notify == 'true'"
 
 done_tests

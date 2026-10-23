@@ -2,12 +2,9 @@
 # Runs the real `tfpls comment parse` (the step of comment-ops.yml) against a stubbed `gh`: which /tofu commands are accepted,
 # and that every rejected command is explained to the user in a PR comment. Run: bash tests/comment-parse.test.sh
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
-CW="$here/.github/workflows/comment-ops.yml"
-eq "comment-ops.yml installs the binary, then runs tfpls comment parse" "$(yq -r '[.jobs.parse.steps[0].uses, (.jobs.parse.steps[] | select(.id == "p") | .run)] | join("|")' "$CW")" "denzhel/tfpls/actions/bin@main|tfpls comment parse"
 
 mkdir "$T/bin"
 cat > "$T/bin/gh" <<'STUB'
@@ -15,9 +12,7 @@ cat > "$T/bin/gh" <<'STUB'
 # minimal gh stub: canned answers, records PR comments and reactions
 args="$*"
 DEFAULT_REVIEWS='[{"user":{"login":"rev1"},"state":"APPROVED","commit_id":"abc123","submitted_at":"2026-01-01T00:00:00Z"}]'
-jqexpr=""; prev=""
-for a in "$@"; do [ "$prev" = --jq ] && jqexpr=$a; prev=$a; done
-emit() { if [ -n "$jqexpr" ]; then printf '%s' "$1" | jq -r "$jqexpr"; else printf '%s\n' "$1"; fi; }
+emit() { printf '%s\n' "$1"; }   # tfpls comment passes no --jq to gh api: it parses the JSON itself
 case "$1 $2" in
   "pr comment") shift 2; while [ $# -gt 0 ]; do [ "$1" = --body ] && printf '%s\n' "$2" >> "$STUB_DIR/comments"; shift; done; exit 0;;
 esac
@@ -88,14 +83,5 @@ run "/tofu apply dev --now" STUB_PERM=write; eq "--now by a writer is refused" "
 run "/tofu plan dev --now" STUB_PERM=admin; eq "--now with plan is refused" "$rc|$(grep -c 'only goes with /tofu apply' <<<"$CMT")" "1|1"
 run "/tofu apply dev" STUB_PERM=admin; eq "without --now the flag is false" "$(grep -c '^now=false' <<<"$OUTF")" 1
 
-# no step of a workflow or action calls the jq binary (gh's own --jq is fine); the glue steps are single tfpls commands
-n=0
-for f in "$here"/.github/workflows/*.yml "$here"/actions/*/action.yml; do
-  yq -r '.. | select(type == "object" and has("run")) | .run' "$f" 2>/dev/null | grep -Eq '(^|[|;&(]|\$\()[[:space:]]*jq[[:space:]]' && { bad "$f invokes jq"; n=1; }
-done
-[ $n -eq 0 ] && ok "no workflow or action step invokes the jq binary"
-eq "the nothing-matched step is tfpls comment nomatch" "$(yq -r '.jobs.parse.steps[] | select(.name == "tell the user when nothing matched") | .run' "$CW")" "tfpls comment nomatch"
-W="$here/.github/workflows"
-eq "dashboard, drift, drift-fix and apply run one tfpls glue command each" "$(yq -r '.jobs[].steps[] | select(.run != null and (.run | test("^tfpls glue "))) | .run' "$W/dashboard.yml" "$W/drift.yml" "$W/drift-fix.yml" "$W/apply.yml" | grep -v -- '^---$' | tr '\n' ',')" "tfpls glue store-page,tfpls glue drift-state,tfpls glue drift-issue,tfpls glue merged-pr,"
 
 done_tests

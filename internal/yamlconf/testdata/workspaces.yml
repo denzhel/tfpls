@@ -1,0 +1,17 @@
+# a .tfpls.yml-like configuration
+version: 1
+defaults:
+  region: eu-west-1
+  tofu_version: "1.13.2"
+workspaces:
+  - path: stacks/network
+    name: network
+    env: {MY_VAR_X: "1", ENABLED: true}
+    depends_on: []
+  - path: "stacks/app"
+    depends_on: [network]
+    labels: [a, b]
+    timeout: 30
+ignore:
+  - "**/*.md"
+  - '!keep.md'

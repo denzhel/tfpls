@@ -15,8 +15,10 @@ cp "$here/.github/workflows/ci.yml" "$T/root/.github/workflows/ci.yml"
 
 cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
-# fake gh: `api graphql -f owner=O -f name=N ...` from rel-O_N.json; issues in issues.json (open ones only)
+# fake gh: `api graphql -f owner=O -f name=N ...` from rel-O_N.json; the open issues are the files issues/<n>.t (title) and
+# issues/<n>.b (body), listed as the JSON array `gh issue list` prints
 D=$STUB_DIR
+. "$STUB_LIB"   # json_str
 echo "$*" >> "$D/log"
 val() { local want=$1 prev='' a; shift; for a in "$@"; do [ "$prev" = "$want" ] && { printf '%s' "$a"; return 0; }; prev=$a; done; return 1; }
 fval() { local want=$1 prev='' a; shift; for a in "$@"; do [ "$prev" = -f ] && [ "${a%%=*}" = "$want" ] && { printf '%s' "${a#*=}"; return 0; }; prev=$a; done; return 1; }
@@ -27,36 +29,48 @@ case "$1 $2" in
     cat "$f";;
   "issue list")
     [ -f "$D/fail-list" ] && { echo "HTTP 500" >&2; exit 1; }
-    cat "$D/issues.json";;
+    out=; for n in $(ls "$D/issues" | sed -n 's/\.t$//p' | sort -n); do
+      out="$out${out:+,}{\"number\":$n,\"title\":$(json_str "$(cat "$D/issues/$n.t")"),\"body\":$(json_str "$(cat "$D/issues/$n.b")")}"
+    done
+    printf '[%s]\n' "$out";;
   "issue create")
     n=$((100 + $(grep -c '^issue create' "$D/log")))
-    jq --argjson n "$n" --arg t "$(val --title "$@")" --arg b "$(val --body "$@")" '. + [{number: $n, title: $t, body: $b}]' "$D/issues.json" > "$D/i.new" && mv "$D/i.new" "$D/issues.json"
+    printf '%s' "$(val --title "$@")" > "$D/issues/$n.t"; printf '%s' "$(val --body "$@")" > "$D/issues/$n.b"
     echo "https://github.com/o/r/issues/$n";;
   "issue edit")
-    jq --argjson n "$3" --arg b "$(val --body "$@")" 'map(if .number == $n then .body = $b else . end)' "$D/issues.json" > "$D/i.new" && mv "$D/i.new" "$D/issues.json";;
+    printf '%s' "$(val --body "$@")" > "$D/issues/$3.b";;
   "issue close")
     val --comment "$@" > "$D/close-comment"
-    jq --argjson n "$3" 'map(select(.number != $n))' "$D/issues.json" > "$D/i.new" && mv "$D/i.new" "$D/issues.json";;
+    rm -f "$D/issues/$3.t" "$D/issues/$3.b";;
   "label create") ;;
   *) echo "fake gh: unexpected call: gh $*" >&2; exit 2;;
 esac
 STUB
 chmod +x "$T/bin/gh"
-export STUB_DIR="$T/stub"
+export STUB_DIR="$T/stub" STUB_LIB="$here/tests/lib.sh"
+mkdir -p "$STUB_DIR/issues"
+# seed <number> <title> <body>: an open issue; first_n, first_title, first_body: the lowest-numbered open issue
+seed() { printf '%s' "$2" > "$STUB_DIR/issues/$1.t"; printf '%s' "$3" > "$STUB_DIR/issues/$1.b"; }
+first_n() { ls "$STUB_DIR/issues" | sed -n 's/\.t$//p' | sort -n | head -1; }
+first_title() { local n; n=$(first_n); [ -n "$n" ] && cat "$STUB_DIR/issues/$n.t"; }
+first_body() { local n; n=$(first_n); [ -n "$n" ] && cat "$STUB_DIR/issues/$n.b"; }
 
 # releases <owner/repo> <tag[:pre|:draft]>...: a fixture in the order given (newest by date first, as GitHub lists them)
 releases() {
   local r=$1; shift
-  printf '%s\n' "$@" | jq -R --arg r "$r" 'split(":") as $p
-    | {tagName: $p[0], url: ("https://github.com/" + $r + "/releases/tag/" + $p[0]), isDraft: ($p[1] == "draft"), isPrerelease: ($p[1] == "pre")}' \
-    | jq -s '{data: {repository: {releases: {nodes: .}}}}' > "$STUB_DIR/rel-$(tr / _ <<<"$r").json"
+  local nodes="" spec tag kind
+  for spec in "$@"; do
+    tag=${spec%%:*}; kind=""; [ "$spec" = "$tag" ] || kind=${spec#*:}
+    nodes="$nodes${nodes:+,}{\"tagName\":\"$tag\",\"url\":\"https://github.com/$r/releases/tag/$tag\",\"isDraft\":$([ "$kind" = draft ] && echo true || echo false),\"isPrerelease\":$([ "$kind" = pre ] && echo true || echo false)}"
+  done
+  printf '{"data":{"repository":{"releases":{"nodes":[%s]}}}}\n' "$nodes" > "$STUB_DIR/rel-$(tr / _ <<<"$r").json"
 }
 bump() { local a b c; IFS=. read -r a b c <<<"$1"; echo "$a.$b.$((c + 1))"; }
 run() { : > "$T/summary"; TFPLS_ROOT="${ROOT:-$T/root}" REPO=o/r RUN_URL=https://github.com/o/r/actions/runs/1 GH_TOKEN=x TFPLS_RETRY_DELAY=0 \
   GITHUB_STEP_SUMMARY="$T/summary" PATH="$T/bin:$PATH" "$T/toolversions" > "$T/out" 2>&1; rc=$?; }
 calls() { grep -c "^$1" "$STUB_DIR/log"; }
-open_n() { jq length "$STUB_DIR/issues.json"; }
-body() { jq -r '.[0].body // ""' "$STUB_DIR/issues.json"; }
+open_n() { ls "$STUB_DIR/issues" | sed -n '/\.t$/p' | wc -l | tr -d ' '; }
+body() { first_body; }
 fresh_log() { : > "$STUB_DIR/log"; }
 hash_root() { find "$T/root" -type f -exec cksum {} + | sort; }
 
@@ -68,7 +82,7 @@ all_current() { releases opentofu/opentofu "v$tofu"; releases open-policy-agent/
 before=$(hash_root)
 
 # --- everything current and no issue: nothing to do
-all_current; echo '[]' > "$STUB_DIR/issues.json"; fresh_log; run
+all_current; rm -f "$STUB_DIR"/issues/*; fresh_log; run
 eq "all current, no issue: exit 0, no issue created, edited or closed" "$rc|$(calls 'issue create')|$(calls 'issue edit')|$(calls 'issue close')" "0|0|0|0"
 grep -q 'all current' "$T/out" && ok "it says so" || bad "output: $(cat "$T/out")"
 
@@ -78,7 +92,7 @@ new=$(bump "$tofu")
 releases opentofu/opentofu "v1.0.99" "v$new" "v$(bump "$new")-rc1:pre" "v9.9.9:draft" "nightly"
 fresh_log; run
 eq "OpenTofu behind: exit 0, one issue created" "$rc|$(calls 'issue create')|$(open_n)" "0|1|1"
-eq "its title" "$(jq -r '.[0].title' "$STUB_DIR/issues.json")" "Tool versions behind"
+eq "its title" "$(first_title)" "Tool versions behind"
 grep '^issue create' "$STUB_DIR/log" | grep -q -- '--label dependencies' && ok "it carries the dependencies label" || bad "label: $(grep '^issue create' "$STUB_DIR/log")"
 eq "the label is made sure of first" "$(calls 'label create dependencies')" 1
 b=$(body)
@@ -112,14 +126,14 @@ fresh_log; run
 eq "current, no issue: only reads (no create, edit, close or label)" "$rc|$(calls 'issue create')|$(calls 'issue edit')|$(calls 'issue close')|$(calls 'label')" "0|0|0|0|0"
 
 # --- an open issue with that exact title opened by hand is adopted, one with another title is left alone
-echo '[{"number":7,"title":"Tool versions behind","body":"old text"},{"number":8,"title":"Tool versions behind (notes)","body":"x"}]' > "$STUB_DIR/issues.json"
+rm -f "$STUB_DIR"/issues/*; seed 7 "Tool versions behind" "old text"; seed 8 "Tool versions behind (notes)" x
 releases opentofu/opentofu "v$new"; fresh_log; run
 eq "an existing issue with the exact title is updated instead of opening another" "$(calls 'issue create')|$(calls 'issue edit 7')|$(calls 'issue edit 8')" "0|1|0"
 all_current; fresh_log; run
-eq "and closed when current; the other issue is untouched" "$(calls 'issue close 7')|$(calls 'issue close 8')|$(jq -r '.[0].number' "$STUB_DIR/issues.json")" "1|0|8"
+eq "and closed when current; the other issue is untouched" "$(calls 'issue close 7')|$(calls 'issue close 8')|$(first_n)" "1|0|8"
 
 # --- failures: never reported as current, nothing closed or opened
-echo '[{"number":9,"title":"Tool versions behind","body":"old"}]' > "$STUB_DIR/issues.json"
+rm -f "$STUB_DIR"/issues/*; seed 9 "Tool versions behind" old
 rm "$STUB_DIR/rel-rhysd_actionlint.json"; fresh_log; run
 eq "a release list that cannot be read fails the run and closes nothing" "$rc|$(calls 'issue close')|$(calls 'issue create')|$(open_n)" "1|0|0|1"
 grep -q '::error::.*rhysd/actionlint' "$T/out" && ok "the error names the repository" || bad "error: $(cat "$T/out")"
@@ -140,11 +154,6 @@ grep -q '::error::.*internal/setup/setup.go' "$T/out" && ok "the error names the
 eq "no file under the checked tree changed in any run" "$(hash_root)" "$before"
 grep -rnE 'os\.(WriteFile|Create|Remove|Rename|MkdirAll)' "$here/internal/toolversions/toolversions.go" >/dev/null 2>&1 && bad "the code writes files" || ok "the code writes no file (only the step summary is appended)"
 
-# --- the workflow: weekly and by hand, least privilege, runs the script
-yq '.' "$W" >/dev/null 2>&1 && ok "tool-versions.yml parses" || bad "tool-versions.yml missing or invalid"
-eq "triggers: a weekly schedule and workflow_dispatch" "$(yq -r '.on | keys | sort | join(",")' "$W" 2>/dev/null)|$(yq -r '.on.schedule | length' "$W" 2>/dev/null)" "schedule,workflow_dispatch|1"
-eq "permissions: contents read and issues write, nothing else" "$(yq -r '.permissions | to_entries | map(.key + ":" + .value) | sort | join(",")' "$W" 2>/dev/null)" "contents:read,issues:write"
-eq "no job widens them" "$(yq -r '[.jobs[] | select(has("permissions"))] | length' "$W" 2>/dev/null)" 0
 grep -q 'go run ./cmd/toolversions' "$W" && ok "the job runs cmd/toolversions" || bad "script not run"
 eq "the checkout keeps no token" "$(grep -c 'uses: actions/checkout@' "$W")|$(grep -c 'persist-credentials: false' "$W")" "1|1"
 eq "Go comes from go.mod (setup-go pinned to a commit)" "$(grep -cE 'uses: actions/setup-go@[0-9a-f]{40}' "$W")|$(grep -c 'go-version-file: go.mod' "$W")" "1|1"

@@ -135,7 +135,7 @@ func Report(e Env) int {
 }
 
 // readResult: the last object of type "result" in the execution file (JSON or JSON lines; arrays are flattened), or nil when the
-// file is missing or unreadable, is not JSON, or has no result (jq -s failed or gave null the same way).
+// file is missing or unreadable, is not JSON, or has no result (the former shell version failed or gave null the same way).
 func readResult(path string) map[string]any {
 	if path == "" {
 		return nil

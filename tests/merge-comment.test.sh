@@ -5,17 +5,10 @@ set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-A="$here/.github/workflows/apply.yml"
 
-# wiring of apply.yml
-eq "detect exposes the merged PR number" "$(yq -r '.jobs.detect.outputs.pr_number' "$A")" '${{ steps.pr.outputs.pr_number }}'
-eq "the apply step hands the PR number to the tofu action" "$(yq -r '.jobs.apply.steps[] | select(.id == "t") | .with.pr_number' "$A")" '${{ needs.detect.outputs.pr_number }}'
-eq "the apply job may write the comment" "$(yq -r '.jobs.apply.permissions."pull-requests"' "$A")" "write"
-eq "the detect job still only reads" "$(yq -r '.jobs.detect.permissions."pull-requests"' "$A")" "read"
 
 # the lookup of the detect job (tfpls glue merged-pr), run against a fake gh that prints a fixture
 build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
-eq "apply.yml runs tfpls glue merged-pr" "$(yq -r '.jobs.detect.steps[] | select(.id == "pr") | .run' "$A")" "tfpls glue merged-pr"
 mkdir -p "$T/bin"
 cat > "$T/bin/gh" <<'EOF'
 #!/usr/bin/env bash

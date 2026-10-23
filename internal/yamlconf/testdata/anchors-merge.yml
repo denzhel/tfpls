@@ -1,0 +1,18 @@
+base: &base
+  a: 1
+  b: [x, y]
+  nested: {k: v}
+derived:
+  <<: *base
+  a: 2
+  c: "3"
+list:
+  - &item {name: n1, on: yes}
+  - *item
+scalars: [1, 1.5, true, null, ~, "yes", 'no', 0x10, "", on, off]
+multi: |
+  line one
+  line two
+folded: >-
+  folded text
+  here

@@ -186,7 +186,7 @@ type entry struct {
 	raw   json.RawMessage
 }
 
-// ordered reads a JSON object keeping the order of its keys (what jq prints).
+// ordered reads a JSON object keeping the order of its keys (what the former shell version printed).
 func ordered(s string) ([]entry, error) {
 	dec := json.NewDecoder(strings.NewReader(s))
 	if t, err := dec.Token(); err != nil || t != json.Delim('{') {

@@ -28,10 +28,7 @@ printf '%s' "$out" | tail -1 | grep -q "Plan: 6000 to add" && ok "the final summ
 head -1 <<<"$out" | grep -q "resource line number 1 " && ok "the beginning is kept" || bad "head lost"
 
 # multibyte characters cut at the boundary must not leave invalid UTF-8
-python3 - "$T/utf.txt" <<'PY'
-import sys
-open(sys.argv[1],"w",encoding="utf-8").write(("ש" * 30000) + "\nPlan: 1 to add\n" + ("é" * 30000))
-PY
+{ yes ש | head -n 30000 | tr -d '\n'; printf '\nPlan: 1 to add\n'; yes é | head -n 30000 | tr -d '\n'; } > "$T/utf.txt"
 out=$(tfpls_clip_plan "$T/utf.txt" 10001)
 printf '%s' "$out" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 && ok "output is valid UTF-8 even when the cut falls inside a character" || bad "invalid UTF-8"
 # plan text produced by the tool can contain invalid bytes too
@@ -138,7 +135,7 @@ cat > "$T/comments.json" <<'J'
  {"id":4,"body":"just a human comment, mentions <!-- tfpls: in the middle"}
 ]
 J
-mark() { rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/comments.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES="$(jq -c '[.[].name]' <<<"$1")" "$T/tfpls" mark-outdated >/dev/null 2>&1; rc=$?; }
+mark() { rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/comments.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES="[$(grep -o '"name":"[^"]*"' <<<"$1" | sed 's/^"name"://' | paste -sd, -)]" "$T/tfpls" mark-outdated >/dev/null 2>&1; rc=$?; }
 mark '{"terraform/dev":{"name":"terraform/dev"}}'
 [ $rc -eq 0 ] && ok "tfpls mark-outdated succeeds" || bad "rc=$rc"
 grep -q "comments/5" "$T/patched" 2>/dev/null && bad "a stranger's comment with the marker was edited" || ok "a stranger's comment that starts with the marker is never edited"

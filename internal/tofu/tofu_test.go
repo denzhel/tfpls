@@ -32,7 +32,7 @@ func TestLoadEntry(t *testing.T) {
 	if s, _ = LoadEntry(env(nil), `{"name":"a"}`); s.Parallelism != "" {
 		t.Error("a missing key stays empty")
 	}
-	// jq's `// "" | tostring`: null and false are empty, numbers and true are their text, a structure is compact JSON
+	// the `// "" | tostring` of the former shell version: null and false are empty, numbers and true are their text, a structure is compact JSON
 	s, _ = LoadEntry(env(nil), `{"parallelism":5,"plan_lock":false,"var_file":null,"policy_dir":true,"policy_params":{"a": [1, 2]}}`)
 	if s.Parallelism != "5" || s.PlanLock != "" || s.VarFile != "" || s.PolicyDir != "true" || s.PolicyParams != `{"a":[1,2]}` {
 		t.Errorf("tostring: %+v", s)

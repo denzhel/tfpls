@@ -39,7 +39,7 @@ const marker = "<!-- tfpls:credentials -->"
 
 type pair struct{ key, val string }
 
-// parseMap reads a JSON object into ordered key/value pairs; a value that is not a string is its compact JSON (jq's tostring).
+// parseMap reads a JSON object into ordered key/value pairs; a value that is not a string is its compact JSON (tostring).
 func parseMap(s string) ([]pair, error) {
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
@@ -190,7 +190,7 @@ func orDefault(s, d string) string {
 	return s
 }
 
-// firstOf is jq's `.a // .b`: the first key with a value that is not empty, null or false.
+// firstOf is `.a // .b`: the first key with a value that is not empty, null or false.
 func firstOf(p []pair, keys ...string) string {
 	for _, k := range keys {
 		for i := len(p) - 1; i >= 0; i-- {

@@ -18,8 +18,9 @@ fi
 [ -n "$C" ] || { echo "conftest not available"; exit 1; }
 
 # plan <type> <actions-json> <after-json> [after_unknown-json]  => plan json on stdout
-plan() { jq -cn --arg t "$1" --argjson a "$2" --argjson af "$3" --argjson au "${4:-{\}}" \
-  '{resource_changes:[{address:($t+".x"), type:$t, change:{actions:$a, before:null, after:$af, after_unknown:$au}}]}'; }
+plan() { printf '{"resource_changes":[{"address":"%s.x","type":"%s","change":{"actions":%s,"before":null,"after":%s,"after_unknown":%s}}]}' "$1" "$1" "$2" "$3" "${4:-{\}}"; }
+# strfield <key> <text> => {"<key>":"<text as a JSON string>"} (a policy document is a string inside the plan)
+strfield() { printf '{"%s":%s}' "$1" "$(json_str "$2")"; }
 
 # run <pack> <plan> => sets out and rc
 run() { echo "$2" > "$T/p.json"; out=$("$C" test "$T/p.json" -p "$L/$1" --no-color 2>&1); rc=$?; }
@@ -54,11 +55,11 @@ clean aws-network "$(plan aws_security_group '["create"]' '{"ingress":[{"from_po
 
 # ---- aws-iam
 star='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}'
-fails aws-iam "$(plan aws_iam_policy '["create"]' "$(jq -cn --arg p "$star" '{policy:$p}')")" 'Action "\*"' && ok "aws-iam: Action * on Resource * denied" || bad "iam star: $out"
+fails aws-iam "$(plan aws_iam_policy '["create"]' "$(strfield policy "$star")")" 'Action "\*"' && ok "aws-iam: Action * on Resource * denied" || bad "iam star: $out"
 ok_doc='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::b/*"}]}'
-clean aws-iam "$(plan aws_iam_policy '["create"]' "$(jq -cn --arg p "$ok_doc" '{policy:$p}')")" && ok "aws-iam: scoped policy is clean" || bad "iam clean: $out"
+clean aws-iam "$(plan aws_iam_policy '["create"]' "$(strfield policy "$ok_doc")")" && ok "aws-iam: scoped policy is clean" || bad "iam clean: $out"
 anyone='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"sts:AssumeRole"}]}'
-fails aws-iam "$(plan aws_iam_role '["create"]' "$(jq -cn --arg p "$anyone" '{assume_role_policy:$p}')")" "assumed by anyone" && ok "aws-iam: role assumable by anyone denied" || bad "iam principal: $out"
+fails aws-iam "$(plan aws_iam_role '["create"]' "$(strfield assume_role_policy "$anyone")")" "assumed by anyone" && ok "aws-iam: role assumable by anyone denied" || bad "iam principal: $out"
 clean aws-iam "$(plan aws_iam_policy '["create"]' '{"policy":null}' '{"policy":true}')" && ok "aws-iam: unknown policy document is skipped" || bad "iam unknown: $out"
 
 # ---- cost
@@ -74,7 +75,7 @@ done
 
 # ---- parameters (policy_params -> data.params) and combining with your own policy_dir
 mkdir -p "$T/pd"; echo '{"params":{"safety":{"max_destroys":1},"aws-tags":{"required_tags":["team","env"]}}}' > "$T/pd/params.json"
-three=$(jq -cn '{resource_changes:[range(3)|{address:"a.r\(.)",type:"a",change:{actions:["delete"]}}]}')
+three='{"resource_changes":['; for i in 0 1 2; do three="$three{\"address\":\"a.r$i\",\"type\":\"a\",\"change\":{\"actions\":[\"delete\"]}}"; [ "$i" = 2 ] || three="$three,"; done; three="$three]}"
 echo "$three" > "$T/p.json"
 out=$("$C" test "$T/p.json" -p "$L/safety" --no-color 2>&1); rc=$?
 [ "$rc" -eq 0 ] && ok "safety without params: three plain destroys only warn" || bad "safety no params: $out"
