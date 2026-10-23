@@ -21,7 +21,7 @@ import (
 )
 
 // TofuDefault is the default of tfpls setup (tests/onboard.test.sh keeps the two equal).
-const TofuDefault = "1.13.1"
+const TofuDefault = "1.13.2"
 
 // Env is everything Run needs from the outside, so that it can be tested.
 type Env struct {
