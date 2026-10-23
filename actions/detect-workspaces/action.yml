@@ -35,7 +35,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: denzhel/tfpls/actions/bin@main
+    - uses: denzhel/tfpls/actions/bin@v0.7.0
     - id: detect
       shell: bash
       env:
