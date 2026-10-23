@@ -41,8 +41,8 @@ gh workflow run tool-versions.yml --repo denzhel/tfpls
 
 | Tool | Default | Compared with |
 |---|---|---|
-| OpenTofu | `TOFU_VERSION` in `actions/setup/install.sh` | releases of `opentofu/opentofu` |
-| conftest | `CONFTEST_VERSION` in `actions/setup/install.sh` | releases of `open-policy-agent/conftest` |
+| OpenTofu | `DefaultTofu` in `internal/setup/setup.go` | releases of `opentofu/opentofu` |
+| conftest | `DefaultConftest` in `internal/setup/setup.go` | releases of `open-policy-agent/conftest` |
 | actionlint | `v=` in `.github/workflows/ci.yml` | releases of `rhysd/actionlint` |
 
 It takes the highest published version among the newest 100 releases: drafts, pre-releases and tags that are not `X.Y.Z` are skipped, and a backport of an older line released later does not count as newer. Then it keeps exactly one open issue titled **Tool versions behind** (label `dependencies`): opened when a default is behind, edited only when the list changes, closed with a comment when every default is current, and left alone (nothing done at all) when everything is current and no issue is open. When a release list or a default cannot be read, the run fails instead of reporting "current".

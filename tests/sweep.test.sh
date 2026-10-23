@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# actions/unlock/sweep.sh (the manual `locks` task): reports every workspace's lock, releases only workspaces named in RELEASE.
+# `tfpls unlock` with ENTRIES (the manual `locks` task): reports every workspace's lock, releases only workspaces named in RELEASE.
 # Stubbed tofu and gh (no network).
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SW="$here/actions/unlock/sweep.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+SW="$T/tfpls"
 mkdir -p "$T/bin" "$T/repo/a" "$T/repo/b" "$T/repo/c"
 # a directory holding a file `lock` is locked since the time written in it; a file `broken` makes init fail
 cat > "$T/bin/tofu" <<'STUB'
@@ -24,7 +25,7 @@ ago() { date -u -v-"$1"M '+%Y-%m-%d %H:%M:%S.000 +0000 UTC' 2>/dev/null || date 
 
 entries='{"a":{"name":"s/a","dir":"a","workspace":""},"b":{"name":"s/b","dir":"b","workspace":""},"c":{"name":"s/c","dir":"c","workspace":""}}'
 run() { : > "$T/log"; : > "$T/gho"; : > "$T/summary"
-  PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/gho" GITHUB_STEP_SUMMARY="$T/summary" ENTRIES="$entries" RELEASE="${RELEASE:-}" REPO_ROOT="$T/repo" RUN_URL=u GITHUB_REPOSITORY=o/r GITHUB_RUN_ID=999 bash "$SW" >"$T/out" 2>&1; echo $?; }
+  PATH="$T/bin:$PATH" STUB_LOG="$T/log" GITHUB_OUTPUT="$T/gho" GITHUB_STEP_SUMMARY="$T/summary" ENTRIES="$entries" RELEASE="${RELEASE:-}" REPO_ROOT="$T/repo" RUN_URL=u GITHUB_REPOSITORY=o/r GITHUB_RUN_ID=999 "$SW" unlock >"$T/out" 2>&1; echo $?; }
 out() { sed -n "s/^$1=//p" "$T/gho"; }
 
 eq "no locks: exit 0, nothing locked or released" "$(run)|$(out locked)|$(out released)" "0|0|0"

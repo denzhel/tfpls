@@ -255,7 +255,7 @@ out=$(ob "$t/rg"); grep -q 'required_version is a range (>= 1.6), not pinned' <<
 echo 1.5.7 > "$t/rg/.terraform-version"; out=$(ob "$t/rg"); grep -q 'that is a Terraform version' <<<"$out" && ok "a Terraform version is called out" || bad "terraform version: $out"
 for e in dev prod; do printf 'terraform {\n  required_version = "1.11.4"\n}\n' > "$t/ev/envs/$e/versions.tf"; done
 out=$(ob "$t/ev"); grep -q 'add a .opentofu-version file with 1.11.4' <<<"$out" && ok "a version pinned only below the root: says the pipeline reads the root" || bad "deep version: $out"
-eq "the default version is the one of actions/setup" "$(grep -oE 'TOFU_VERSION=[0-9.]+' "$here/actions/setup/action.yml" | head -1 | cut -d= -f2)" "$(sed -nE 's/^const TofuDefault = "([0-9.]+)".*/\1/p' "$here"/internal/onboard/onboard.go)"
+eq "the default version is the one of tfpls setup (internal/setup)" "$(sed -nE 's/^[[:space:]]*DefaultTofu[[:space:]]*=[[:space:]]*"([0-9.]+)".*/\1/p' "$here/internal/setup/setup.go")" "$(sed -nE 's/^const TofuDefault = "([0-9.]+)".*/\1/p' "$here"/internal/onboard/onboard.go)"
 
 # ---- no workspaces folder, and an empty one
 mkdir "$t/b"; out=$(ob "$t/b"); eq "no workspaces/ folder is fine" "$?" 0
