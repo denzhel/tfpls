@@ -11,7 +11,7 @@ on:
       runs_on: { type: string, default: ubuntu-latest, description: 'runner label, or a JSON array of labels e.g. ["self-hosted","dedicated-terraform"]' }
       audit: { type: boolean, default: true, description: "append an audit event per run to the data branch (the caller needs contents: write)" }
       queue: { type: boolean, default: false, description: "first-come-first-served queue per workspace instead of GitHub's concurrency group, which cancels the middle run (tickets on the data branch; the caller needs contents: write)" }
-      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.13.1" }
+      tofu_version: { type: string, default: "", description: "OpenTofu version; empty = the version the repository asks for (.opentofu-version, .terraform-version, an exact required_version), else 1.13.2" }
       max_parallel: { type: number, default: 4, description: "how many workspaces are planned/applied at the same time" }
       timeout_minutes: { type: number, default: 60, description: "time limit of the jobs that run tofu; a hung job is cancelled instead of running for hours" }
       apply_environment: { type: string, default: "", description: "GitHub Environment used by apply-capable jobs (holds the apply credentials; can require reviewers)" }
