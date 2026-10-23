@@ -96,13 +96,13 @@ To inspect the saved file itself:
 gh run list --repo OWNER/REPO --workflow tofu --limit 5          # find the run
 gh run download RUN_ID --repo OWNER/REPO -n tfpls-plan-terraform__prod-us-west-1-0123456789ab-all -D plan
 
-# 2. read it with the helper from this repository (needs openssl, tar, jq; `show` also needs tofu)
+# 2. read it with the `tfpls` binary (a release asset; `show` also needs tofu)
 export PLAN_ENCRYPTION_KEY='...'                 # from your password manager
-tools/tfpls-plan decrypt plan/plan.tgz.enc ./out   # extracts tfplan + meta.json and prints the metadata
-cd path/to/stack && tofu init && tools/tfpls-plan show ../../plan/plan.tgz.enc   # human-readable plan
+tfpls plan decrypt plan/plan.tgz.enc ./out   # extracts tfplan + meta.json and prints the metadata
+cd path/to/stack && tofu init && tfpls plan show ../../plan/plan.tgz.enc   # human-readable plan
 ```
 
-Without the helper, the format is plain tools only: the file is AES-256-CBC (PBKDF2, SHA-256) over `<64 hex sha256 of the tgz>\n<tgz>`:
+Without the binary, the format is plain tools only: the file is AES-256-CBC (PBKDF2, SHA-256) over `<64 hex sha256 of the tgz>\n<tgz>`:
 
 ```bash
 openssl enc -d -aes-256-cbc -pbkdf2 -md sha256 -pass env:PLAN_ENCRYPTION_KEY -in plan/plan.tgz.enc -out dec.bin

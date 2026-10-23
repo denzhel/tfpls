@@ -123,6 +123,41 @@ func (s Store) once(d, msg string, writer func(string) error) (bool, error) {
 	return false, nil
 }
 
+// Read clones the tip of the branch into a temporary directory and calls reader with it; the directory is removed afterwards.
+// A branch that does not exist yet reads as an empty directory (found=false). An error means the branch could not be read at
+// all (network, token): callers that wait on the data must not mistake that for "empty".
+func (s Store) Read(reader func(dir string) error) (found bool, err error) {
+	d, err := os.MkdirTemp("", "tfpls-data-")
+	if err != nil {
+		return false, err
+	}
+	defer os.RemoveAll(d)
+	if err := s.git("", "clone", "--quiet", "--depth", "1", "--branch", s.Branch, s.remote(), d); err != nil {
+		// is the branch missing, or the remote unreachable?
+		out, lerr := s.lsRemote()
+		if lerr != nil {
+			return false, fmt.Errorf("cannot read %s: %w", s.Branch, lerr)
+		}
+		if strings.TrimSpace(out) != "" {
+			return false, fmt.Errorf("cannot clone %s", s.Branch)
+		}
+		return false, reader(d)
+	}
+	return true, reader(d)
+}
+
+func (s Store) lsRemote() (string, error) {
+	cmd := exec.Command("git", "ls-remote", "--heads", s.remote(), "refs/heads/"+s.Branch)
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if s.Remote == "" && s.Token != "" {
+		auth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + s.Token))
+		env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader", "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic "+auth)
+	}
+	cmd.Env = env
+	b, err := cmd.Output()
+	return string(b), err
+}
+
 // ValidBranch says whether name is acceptable as the data branch: plain characters, not main or master, and not
 // something git could read as an option or a parent path.
 func ValidBranch(name string) (bool, string) {

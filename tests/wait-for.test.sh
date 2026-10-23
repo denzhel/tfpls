@@ -48,9 +48,6 @@ run prod; eq "the default matrix job name 'apply (prod)' matches" "$rc" 0
 printf '%s\n' '{"name":"apply (preprod)","status":"completed","conclusion":"success"}' > "$T/seq/1"
 run prod 0; eq "'apply (preprod)' does not match prod" "$rc" 1
 
-# the wait budget is unit-tested in internal/waitfor; the queue action still has its own copy of the formula, which must agree
-sed -n '/^budget() /p' "$here/actions/queue/queue.sh" > "$T/budget.sh"; . "$T/budget.sh"
-eq "queue budget: 60 -> 45, 50 -> 35, 31 -> 16, 30 -> 15, 20 -> 10, 2 -> 1, 1 -> 1, 0 -> 0, junk -> 35" "$(budget 60)|$(budget 50)|$(budget 31)|$(budget 30)|$(budget 20)|$(budget 2)|$(budget 1)|$(budget 0)|$(budget abc)" "45|35|16|15|10|1|1|0|35"
 eq "action.yml installs the binary, then runs tfpls wait-for" "$(yq -r '.runs.steps[0].uses' "$here/actions/wait-for/action.yml")|$(yq -r '.runs.steps[1].run' "$here/actions/wait-for/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls wait-for"
 
 done_tests
