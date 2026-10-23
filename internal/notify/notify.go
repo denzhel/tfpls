@@ -79,7 +79,7 @@ func tostring(raw json.RawMessage) string {
 	return b.String()
 }
 
-// parseChanges is what the Bash/jq did: an array's objects with action and address as strings, anything else is nothing.
+// parseChanges is what the former shell version did: an array's objects with action and address as strings, anything else is nothing.
 func parseChanges(raw string) []change {
 	var arr []json.RawMessage
 	if json.Unmarshal([]byte(raw), &arr) != nil {

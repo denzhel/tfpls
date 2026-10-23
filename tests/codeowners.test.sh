@@ -15,8 +15,8 @@ docs/                          @writer
 X
 printf '@org/sre dave erin\n' > "$T/teams"; export TFPLS_TEAMS_FILE="$T/teams"
 rev() { # login state sha [time]
-  jq -cn --arg u "$1" --arg s "$2" --arg c "$3" --arg t "${4:-2026-10-10T10:00:00Z}" '{user:{login:$u},state:$s,commit_id:$c,submitted_at:$t}'; }
-mk() { printf '%s\n' "$@" | jq -s '.' > "$T/reviews.json"; }
+  printf '{"user":{"login":"%s"},"state":"%s","commit_id":"%s","submitted_at":"%s"}\n' "$1" "$2" "$3" "${4:-2026-10-10T10:00:00Z}"; }
+mk() { ( IFS=,; printf '[%s]\n' "$*" ) > "$T/reviews.json"; }   # the review objects as one JSON array
 c() { "$C" codeowners check "$T/CODEOWNERS" "$T/reviews.json" HEAD "$@" 2>&1; echo "rc=$?"; }
 
 mk "$(rev alice APPROVED HEAD)"

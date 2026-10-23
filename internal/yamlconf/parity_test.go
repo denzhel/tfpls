@@ -1,51 +1,46 @@
 package yamlconf
 
 import (
-	"bytes"
+	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
-// parity with yq on every YAML file of the repository (skipped when yq or jq is missing)
+// Golden parity with the YAML tool the shell scripts used (mikefarah's, converting a file to JSON): testdata/<name>.yml
+// are representative YAML files (copies of the repository's workflows, actions, issue forms and configuration, plus
+// anchor, merge and scalar cases); testdata/<name>.json is what that tool printed for each, as compact JSON with the
+// keys sorted, generated once. The test needs no such tool: it compares the parsed documents of ToJSON and of the
+// golden file. (Cases where that tool is known to differ from the YAML 1.2 spec, such as a merge key with a list of
+// maps that includes a literal map, or the float form 1E+3, are left out of the fixtures.)
 func TestParityWithYq(t *testing.T) {
-	for _, tool := range []string{"yq", "jq"} {
-		if _, err := exec.LookPath(tool); err != nil {
-			t.Skip(tool + " not installed")
-		}
-	}
-	var files []string
-	for _, pat := range []string{"../../.github/workflows/*.yml", "../../actions/*/action.yml", "../../examples/*/*.yml", "../../examples/*.yml", "../../.github/*.yml"} {
-		m, _ := filepath.Glob(pat)
-		files = append(files, m...)
-	}
+	files, _ := filepath.Glob("testdata/*.yml")
 	if len(files) < 10 {
-		t.Fatalf("only %d files found", len(files))
-	}
-	canon := func(in []byte) string {
-		c := exec.Command("jq", "-S", "-c", ".")
-		c.Stdin = bytes.NewReader(in)
-		out, err := c.Output()
-		if err != nil {
-			t.Fatalf("jq: %v", err)
-		}
-		return string(out)
+		t.Fatalf("only %d fixtures found", len(files))
 	}
 	for _, f := range files {
-		want, err := exec.Command("yq", "-o=json", "-I0", ".", f).Output()
-		if err != nil {
-			t.Errorf("%s: yq: %v", f, err)
-			continue
-		}
-		b, _ := os.ReadFile(f)
-		got, err := ToJSON(b)
-		if err != nil {
-			t.Errorf("%s: %v", f, err)
-			continue
-		}
-		if canon(got) != canon(want) {
-			t.Errorf("%s: differs from yq", f)
-		}
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			golden, err := os.ReadFile(strings.TrimSuffix(f, ".yml") + ".json")
+			if err != nil {
+				t.Fatalf("missing golden file: %v", err)
+			}
+			b, _ := os.ReadFile(f)
+			got, err := ToJSON(b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var g, w any
+			if err := json.Unmarshal(got, &g); err != nil {
+				t.Fatalf("ToJSON output is not JSON: %v", err)
+			}
+			if err := json.Unmarshal(golden, &w); err != nil {
+				t.Fatalf("golden is not JSON: %v", err)
+			}
+			if !reflect.DeepEqual(g, w) {
+				t.Errorf("differs from the golden output\n got: %s\nwant: %s", got, golden)
+			}
+		})
 	}
 }

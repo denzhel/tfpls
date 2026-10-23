@@ -57,7 +57,7 @@ type event struct {
 	fields    map[string]any
 }
 
-// tostr is jq's string interpolation of a value.
+// tostr is the string interpolation of a value in the former shell version.
 func tostr(v any) string {
 	switch x := v.(type) {
 	case nil:

@@ -1,0 +1,111 @@
+name: finish
+description: "The end of a job that ran tofu: notify, write the audit event, leave the apply queue (run it with if always())"
+inputs:
+  entry:
+    description: "JSON of the workspace entry (name, notify_* settings)"
+    required: true
+  label:
+    required: true
+  status:
+    description: "result of the run (applied, no-changes, error, in-sync, drift ...)"
+    required: true
+  kind:
+    description: "audit event kind: apply | drift"
+    default: apply
+  notify:
+    description: "true | false: send the notification"
+    default: "true"
+  notify_kind:
+    description: "kind shown in the message, default: kind"
+    default: ""
+  webhook:
+    description: "secrets.SLACK_WEBHOOK, the default webhook (composite actions cannot read secrets; pass each secret by name)"
+    default: ""
+  webhooks:
+    description: 'secrets.TFPLS_NOTIFY_WEBHOOKS, a JSON object {"KEY": "https://..."} of further webhooks; entry.notify_secret names a key'
+    default: ""
+  template_ref:
+    default: ""
+  pr:
+    default: ""
+  summary:
+    default: ""
+  counts:
+    default: ""
+  changes:
+    default: "[]"
+  changes_more:
+    default: "0"
+  duration:
+    default: ""
+  reviewed:
+    default: ""
+  via:
+    default: ""
+  audit:
+    description: "true | false"
+    default: "true"
+  audit_branch:
+    default: tfpls-data
+  queue:
+    description: "true | false: leave the apply queue"
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - if: always()
+      uses: denzhel/tfpls/actions/bin@main
+    # the workspace's webhook: notify_secret is a key of TFPLS_NOTIFY_WEBHOOKS (default: SLACK_WEBHOOK); masked before the next step shows it
+    - id: hook
+      if: always() && inputs.notify == 'true'
+      shell: bash
+      env:
+        KEY: ${{ fromJSON(inputs.entry).notify_secret }}
+        DEFAULT_HOOK: ${{ inputs.webhook }}
+        HOOKS: ${{ inputs.webhooks }}
+      run: tfpls finish webhook
+    - if: always() && inputs.notify == 'true'
+      uses: denzhel/tfpls/actions/notify-slack@main
+      with:
+        webhook: ${{ steps.hook.outputs.url }}
+        format: ${{ fromJSON(inputs.entry).notify_format }}
+        mention: ${{ fromJSON(inputs.entry).notify_mention }}
+        template: ${{ fromJSON(inputs.entry).notify_template }}
+        template_ref: ${{ inputs.template_ref }}
+        name: ${{ inputs.label }}
+        kind: ${{ inputs.notify_kind || inputs.kind }}
+        pr: ${{ inputs.pr }}
+        status: ${{ inputs.status }}
+        summary: ${{ inputs.summary }}
+        counts: ${{ inputs.counts }}
+        changes: ${{ inputs.changes }}
+        changes_more: ${{ inputs.changes_more }}
+    # the audit event goes to the data branch
+    - if: always() && inputs.audit == 'true'
+      shell: bash
+      env:
+        AUDIT: ${{ inputs.audit }}
+        WORKSPACE: ${{ fromJSON(inputs.entry).name }}
+        NAME: ${{ fromJSON(inputs.entry).name }}
+        LABEL: ${{ inputs.label }}
+        KIND: ${{ inputs.kind }}
+        STATUS: ${{ inputs.status }}
+        SUMMARY: ${{ inputs.summary }}
+        COUNTS: ${{ inputs.counts }}
+        DURATION: ${{ inputs.duration }}
+        REVIEWED: ${{ inputs.reviewed }}
+        VIA: ${{ inputs.via }}
+        PR: ${{ inputs.pr }}
+        BRANCH: ${{ inputs.audit_branch }}
+        TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        ACTOR: ${{ github.actor }}
+        TRIGGER: ${{ github.event_name }}
+        SHA: ${{ github.sha }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: tfpls finish store
+    - if: always() && inputs.queue == 'true'
+      uses: denzhel/tfpls/actions/queue@main
+      with:
+        mode: leave
+        name: ${{ fromJSON(inputs.entry).name }}

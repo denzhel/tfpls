@@ -28,7 +28,7 @@ step() { # name state -> transition issue
   tr_=$(sed -n 's/^transition=//p' "$T/gho"); is_=$(sed -n 's/^issue=//p' "$T/gho")
 }
 n() { grep -c "^$1" "$T/log"; }
-st() { git --git-dir="$T/remote.git" show "tfpls-data:drift/$1.json" 2>/dev/null | jq -r .state; }
+st() { git --git-dir="$T/remote.git" show "tfpls-data:drift/$1.json" 2>/dev/null | sed -n 's/^  "state": "\(.*\)",$/\1/p'; }   # the file is indented, one key per line
 
 : > "$T/log"
 step terraform/dev in-sync; eq "first sight of an in-sync workspace: no transition, no issue" "$tr_|$(n 'issue create')" "none|0"
@@ -37,7 +37,7 @@ B="$T/body"
 eq "the issue body has no run link and none of the how-to text" "$(grep -c 'Latest run\|Fix it without a pull request\|/tofu fix\|To change the code instead\|opened when a workspace drifts' "$B")" "0"
 eq "without a plan text the issue still has the title line and the table, and no collapsed block" "$(grep -c 'has drifted from its code' "$B")|$(grep -c '^| Since |' "$B")|$(grep -c '| Plan | +0 ~1 -0 |' "$B")|$(grep -c '<details>' "$B")" "1|1|1|0"
 step terraform/dev drift 2026-10-10T11:00:00Z; eq "still drifted: no transition, issue refreshed not duplicated" "$tr_|$(n 'issue create')|$(n 'issue edit')" "none|1|1"
-eq "the since date survives a repeated check" "$(git --git-dir="$T/remote.git" show tfpls-data:drift/terraform_dev.json | jq -r .since)" "2026-10-10T10:00:00Z"
+eq "the since date survives a repeated check" "$(git --git-dir="$T/remote.git" show tfpls-data:drift/terraform_dev.json | sed -n 's/^  "since": "\(.*\)",$/\1/p')" "2026-10-10T10:00:00Z"
 step terraform/dev drift 2026-10-10T12:00:00Z; eq "a third check is still quiet" "$tr_|$(n 'issue create')" "none|1"
 step terraform/dev in-sync; eq "drift -> in-sync is recovered and closes the issue" "$tr_|$(n 'issue close')|$(st terraform_dev)" "recovered|1|in-sync"
 step terraform/dev in-sync; eq "in-sync again: nothing" "$tr_|$(n 'issue close')" "none|1"

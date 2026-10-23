@@ -20,7 +20,7 @@ func TestGlobMatch(t *testing.T) {
 		{"a.b", "axb", false},       // the dot is literal
 		{"a+b", "aab", false},       // so is every regexp character
 		{"(x)", "(x)", true},        // ... and parentheses
-		{"dev-a", "dev-a\n", false}, // BUG (jq): `$` matched before a trailing newline; the whole string must match
+		{"dev-a", "dev-a\n", false}, // BUG (the old shell version): `$` matched before a trailing newline; the whole string must match
 		{"dev-a", "dev-a\nb", false},
 	} {
 		if got := GlobMatch(c.g, c.p); got != c.want {

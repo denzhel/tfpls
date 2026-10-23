@@ -31,7 +31,7 @@ func hasMsg(ps []Problem, level, sub string) bool {
 }
 
 func TestValidateStrictAnchors(t *testing.T) {
-	// BUG (jq): `$` matched before a trailing newline, so "5m\n" and "SLACK\n" passed
+	// BUG (the old shell version): `$` matched before a trailing newline, so "5m\n" and "SLACK\n" passed
 	ps := problems(t, "defaults: { lock_timeout: \"5m\\n\", notify_secret: \"X\\n\" }\nstacks: [{ name: s, workspaces: [a] }]")
 	if !hasMsg(ps, "error", "30s, 5m or 1h") || !hasMsg(ps, "error", "TFPLS_NOTIFY_WEBHOOKS") {
 		t.Errorf("trailing newlines must be refused: %v", ps)

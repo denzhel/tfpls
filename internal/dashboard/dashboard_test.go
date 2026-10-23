@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +44,38 @@ func TestBuildBadInput(t *testing.T) {
 	}
 	if _, err := ParseEvents("-1"); err == nil {
 		t.Fatal("negative events accepted")
+	}
+}
+
+// the data block of the page (the one script element with id="data") is valid JSON with the repository, the
+// workspaces and the events, and nothing in it can close the script element
+func TestDataBlockIsJSON(t *testing.T) {
+	out := t.TempDir()
+	if _, _, err := Build(fixture(t), out, Options{Repo: "o/r", Events: 50, Now: "2026-10-10T10:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	page, _ := os.ReadFile(filepath.Join(out, "index.html"))
+	s := string(page)
+	i := strings.Index(s, `<script id="data"`)
+	if i < 0 {
+		t.Fatal("no data block")
+	}
+	s = s[i:]
+	s = s[strings.Index(s, ">")+1:]
+	s = s[:strings.Index(s, "</script>")]
+	if strings.Contains(s, "<") {
+		t.Errorf("a raw < in the data block: %s", s)
+	}
+	var data struct {
+		Repo       string           `json:"repo"`
+		Workspaces []map[string]any `json:"workspaces"`
+		Events     []map[string]any `json:"events"`
+	}
+	if err := json.Unmarshal([]byte(s), &data); err != nil {
+		t.Fatalf("the data block is not JSON: %v\n%s", err, s)
+	}
+	if data.Repo != "o/r" || len(data.Workspaces) != 1 || len(data.Events) != 1 {
+		t.Errorf("unexpected data: %+v", data)
 	}
 }
 

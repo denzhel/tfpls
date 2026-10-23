@@ -10,13 +10,14 @@ S="$T/tfpls tofu summarize"
 plan() { printf '%s' "$1" > "$T/p.json"; }
 js()   { $S "$T/p.json" json; }
 hdr()  { $S "$T/p.json" header; }
-rc() { jq -cn --arg a "$1" --argjson acts "$2" '{address:$a, change:{actions:$acts, before:{"secret":"hunter2"}, after:{"secret":"hunter3"}}}'; }
-wrap() { jq -cn --argjson r "[$1]" '{resource_changes:$r}'; }
+rc() { printf '{"address":"%s","change":{"actions":%s,"before":{"secret":"hunter2"},"after":{"secret":"hunter3"}}}' "$1" "$2"; }
+wrap() { printf '{"resource_changes":[%s]}' "$1"; }
 
 plan "$(wrap "$(rc a '["create"]'),$(rc b '["update"]'),$(rc c '["delete"]'),$(rc d '["delete","create"]'),$(rc e '["no-op"]'),$(rc f '["read"]')")"
 eq "header counts create/update/delete/replace and ignores no-op and read" "$(hdr)" "+2 ~1 -2 (1 replace)"
-eq "counts as JSON" "$(js | jq -c .counts)" '{"add":2,"change":1,"destroy":2,"replace":1}'
-eq "changed addresses carry the action, nothing else" "$(js | jq -c '[.resources[] | .address + ":" + .action]')" '["a:create","b:update","c:delete","d:replace"]'
+# the JSON is compact with a fixed key order: counts, header, resources
+eq "counts as JSON" "$(js | sed 's/^{"counts":\({[^}]*}\),.*/\1/')" '{"add":2,"change":1,"destroy":2,"replace":1}'
+eq "changed addresses carry the action, nothing else" "$(js | sed 's/.*"resources":\(.*\)}$/\1/')" '[{"address":"a","action":"create"},{"address":"b","action":"update"},{"address":"c","action":"delete"},{"address":"d","action":"replace"}]'
 case "$(js)" in *hunter*) bad "a value leaked into the summary";; *) ok "no attribute value is ever in the summary";; esac
 plan '{"resource_changes":[]}'; eq "empty plan header" "$(hdr)" "+0 ~0 -0"
 plan '{}'; eq "a plan without resource_changes does not break" "$(hdr)" "+0 ~0 -0"

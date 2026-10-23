@@ -95,7 +95,7 @@ func strs(v any) []string {
 	return out
 }
 
-// truthy is jq's notion for `//`: null and false count as absent.
+// truthy is the notion of `//` in the former shell version: null and false count as absent.
 func truthy(v any) bool { return v != nil && v != false }
 
 func orStr(v any, def string) string {
@@ -142,7 +142,7 @@ func orderedOverrides(m obj, keys []string) []kv {
 	return out
 }
 
-// mergeOverrides is jq's `$top + $own`: the keys of $top first, a key of $own replaces the value in place, new keys follow.
+// mergeOverrides is `$top + $own` of the former shell version: the keys of $top first, a key of $own replaces the value in place, new keys follow.
 func mergeOverrides(top, own []kv) []kv {
 	out := append([]kv{}, top...)
 	for _, o := range own {

@@ -12,7 +12,7 @@ commits() { "${G[@]}" rev-list --count tfpls-data 2>/dev/null || echo 0; }
 
 eq "audit: exit 0" "$(run AUDIT=true)" 0
 eq "one commit" "$(commits)" 1
-eq "the audit event is there" "$("${G[@]}" show tfpls-data:audit/2026-10.jsonl | jq -r '[.workspace,.status]|join(",")')" "terraform/dev,applied"
+eq "the audit event is there" "$("${G[@]}" show tfpls-data:audit/2026-10.jsonl | grep -c '"workspace":"terraform/dev","kind":"[a-z]*","status":"applied"')" 1
 eq "a second run appends: one more commit" "$(run AUDIT=true STATUS=error TFPLS_NOW=2026-10-10T11:00:00Z)|$(commits)|$("${G[@]}" show tfpls-data:audit/2026-10.jsonl | wc -l | tr -d ' ')" "0|2|2"
 eq "audit off does nothing" "$(run AUDIT=false)|$(commits)" "0|2"
 eq "main is refused (and nothing breaks)" "$(run AUDIT=true BRANCH=main)|$(grep -c refusing "$T/out")" "0|1"

@@ -1,4 +1,4 @@
-// Package yamlconf reads YAML into plain JSON-compatible values: what `yq -o=json '.' file` gave the shell scripts.
+// Package yamlconf reads YAML into plain JSON-compatible values: what the YAML tool of the former shell scripts gave.
 package yamlconf
 
 import (

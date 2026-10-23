@@ -1,5 +1,5 @@
 # CI for the tfpls repo itself, on GitHub-hosted runners.
-# Needs actionlint (installed below, pinned and checksum-verified), shellcheck, yq, jq and python3 (on the runner image).
+# Needs actionlint (installed below, pinned and checksum-verified), shellcheck (on the runner image) and Go; the YAML files are parsed by a Go test (internal/repocheck).
 # Lints the workflows and scripts, runs the offline test suite.
 name: ci
 on:
@@ -31,11 +31,6 @@ jobs:
           actionlint -color
       - name: shellcheck
         run: shellcheck -S warning actions/bin/install.sh tools/onboard tools/release.sh tools/tfpls-dashboard tests/*.sh
-      - name: yaml parses
-        run: |
-          for f in .github/workflows/*.yml actions/*/action.yml examples/.tfpls.yml .github/ISSUE_TEMPLATE/*.yml; do
-            yq '.' "$f" > /dev/null || { echo "::error file=$f::not valid YAML"; exit 1; }
-          done
 
   bin-action:
     # the action that puts tfpls on the PATH of a job: on a branch it builds the binary from this checkout

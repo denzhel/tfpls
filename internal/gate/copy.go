@@ -50,7 +50,7 @@ func writeCopy(w io.Writer, is issue, labels []string, cs []comment, mode, start
 	case trusted(is.assoc):
 		fmt.Fprintln(w, is.body)
 	case proposal:
-		// the raw body (not the trimmed one): jq printed it straight from the JSON
+		// the raw body (not the trimmed one): the former shell version printed it straight from the JSON
 		fmt.Fprintf(w, "Title:\n\n%s\n\nBody:\n\n%s\n", fenced(str(is.title)), fenced(is.rawBody))
 	default:
 		fmt.Fprintln(w, "[the body is not included: it was not written by the owner or a collaborator]")

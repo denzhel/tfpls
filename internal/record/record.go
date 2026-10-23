@@ -44,7 +44,7 @@ type event struct {
 	Duration  json.RawMessage `json:"duration_s,omitempty"`
 }
 
-// number returns the JSON number for s when it is one (what jq's tonumber accepts), else nil.
+// number returns the JSON number for s when it is one (what tonumber accepted), else nil.
 func number(s string) json.RawMessage {
 	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
 		return json.RawMessage(strconv.FormatInt(n, 10))

@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 # Tests for `tfpls detect` (internal/detect, run by actions/detect-workspaces) against a temp git repo that has the
-# layout of a "one root module, many tofu workspaces" repo. Needs git, jq, yq, go. Run: bash tests/detect.test.sh
+# layout of a "one root module, many tofu workspaces" repo. Needs git and go. Run: bash tests/detect.test.sh
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
-ACTION="$here/../actions/detect-workspaces/action.yml"
-[ "$(yq -r '.runs.steps[0].uses' "$ACTION")|$(yq -r '.runs.steps[1].run' "$ACTION")" = "denzhel/tfpls/actions/bin@main|tfpls detect" ] && ok "the action installs the binary and runs tfpls detect" || bad "the action does not run tfpls detect"
 
 gt() { git -C "$R" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
 R="$T/repo"; mkdir -p "$R"; gt init -q -b main
@@ -42,8 +39,15 @@ run() {
   : > "$T/out"
   OUT=$(cd "$R" && env -i PATH="$PATH" GITHUB_OUTPUT="$T/out" CONFIG="$1" MODE=changed BASE="${3:-}" HEAD_REF="${4:-}" NAME="${2:-}" "$T/tfpls" detect 2>&1); rc=$?
 }
-wss() { sed -n 's/^entries=//p' "$T/out" | jq -r '[.[].workspace] | sort | join(",")'; }
-field() { sed -n 's/^entries=//p' "$T/out" | jq -r --arg w "$1" --arg f "$2" '.[] | select(.workspace==$w) | .[$f]'; }
+# The outputs are compact JSON written by the program: `entries` is an object keyed by label whose values are flat objects of
+# strings, `matrix` is {"include":[{"label":...},...]} in matrix order. These helpers read them with sed and grep.
+elines() { sed -n 's/^entries=//p' "$T/out" | sed -e 's/^{//' -e 's/}}$/}/' -e "s/},\"\([^\"]*\)\":{/}$(printf '\001')\"\1\":{/g" | tr '\001' '\n'; }   # one entry per line: "<label>":{...}
+fval() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }   # the string value of a field of one entry line
+mlabels() { sed -n 's/^matrix=//p' "$T/out" | grep -o '"label":"[^"]*"' | sed 's/^"label":"\(.*\)"$/\1/'; }   # the labels in matrix order
+efields() { local l=$1 line f out=""; shift; line=$(elines | grep "^\"$l\":{" | head -1); for f in "$@"; do out="$out${out:+|}$(fval "$f" <<<"$line")"; done; printf '%s' "$out"; }   # efields <label> <field>... joined with |
+by_ws() { local l; elines | while IFS= read -r l; do printf '%s\t%s\n' "$(fval workspace <<<"$l")" "$(fval "$1" <<<"$l")"; done | LC_ALL=C sort | cut -f2 | paste -sd'|' -; }   # a field of every entry, ordered by workspace
+wss() { elines | fval workspace | LC_ALL=C sort | paste -sd, -; }
+field() { elines | grep -F "\"workspace\":\"$1\"" | fval "$2"; }
 commit_change() { echo "# change $RANDOM" >> "$R/$1"; gt add -A >/dev/null; gt commit -qm "change $1"; }
 eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1 (got '$2', want '$3')"; }
 
@@ -51,10 +55,10 @@ ALL="dev-us-east-1,dr-us-east-1,prod-us-west-1,stg-us-west-2"
 
 # output shape: the matrix has ONE key (label) so jobs need no custom name; details are looked up in `entries`
 run .tfpls.yml "" ""
-eq "matrix has a single key: label" "$(sed -n 's/^matrix=//p' "$T/out" | jq -c '[.include[] | keys] | unique')" '[["label"]]'
-eq "matrix labels are the workspace names" "$(sed -n 's/^matrix=//p' "$T/out" | jq -r '[.include[].label] | sort | join(",")')" "$ALL"
-eq "entries are keyed by label" "$(sed -n 's/^entries=//p' "$T/out" | jq -r 'keys | join(",")')" "$ALL"
-eq "an entry carries what the jobs need" "$(sed -n 's/^entries=//p' "$T/out" | jq -r '.["dev-us-east-1"] | [.name,.dir,.workspace,.auto_apply] | join("|")')" "terraform/dev-us-east-1|.|dev-us-east-1|always"
+eq "matrix has a single key: label" "$(sed -n 's/^matrix=//p' "$T/out" | sed -e 's/{"label":"[^"]*"}//g' -e 's/,//g')|$(mlabels | wc -l | tr -d ' ')" "{\"include\":[]}|$(tr ',' '\n' <<<"$ALL" | wc -l | tr -d ' ')"
+eq "matrix labels are the workspace names" "$(mlabels | LC_ALL=C sort | paste -sd, -)" "$ALL"
+eq "entries are keyed by label" "$(elines | sed 's/^"\([^"]*\)":.*/\1/' | LC_ALL=C sort | paste -sd, -)" "$ALL"
+eq "an entry carries what the jobs need" "$(efields dev-us-east-1 name dir workspace auto_apply)" "terraform/dev-us-east-1|.|dev-us-east-1|always"
 run .tfpls.yml "" "";                     eq "no base => every workspace" "$(wss)" "$ALL"
 run .tfpls.yml "" 0000000000000000000000000000000000000000; eq "all-zero base (new branch) => every workspace" "$(wss)" "$ALL"
 run .tfpls.yml "" deadbeefdeadbeefdeadbeefdeadbeefdeadbeef; eq "unknown base => every workspace" "$(wss)" "$ALL"
@@ -164,9 +168,9 @@ stacks:
     workspaces: [alpha]
 Y
 run two.yml "" ""
-eq "workspaces_file ignores comments/blank lines (+ inline list)" "$(sed -n 's/^entries=//p' "$T/out" | jq -r '[.[].name] | sort | join(",")')" "one/alpha,one/beta,two/alpha"
-eq "shared workspace name => label falls back to stack/workspace" "$(sed -n 's/^entries=//p' "$T/out" | jq -r '.[] | select(.name=="two/alpha") | .label')" "two/alpha"
-eq "unique workspace name keeps the short label" "$(sed -n 's/^entries=//p' "$T/out" | jq -r '.[] | select(.name=="one/beta") | .label')" "beta"
+eq "workspaces_file ignores comments/blank lines (+ inline list)" "$(elines | fval name | LC_ALL=C sort | paste -sd, -)" "one/alpha,one/beta,two/alpha"
+eq "shared workspace name => label falls back to stack/workspace" "$(elines | grep -F '"name":"two/alpha"' | fval label)" "two/alpha"
+eq "unique workspace name keeps the short label" "$(elines | grep -F '"name":"one/beta"' | fval label)" "beta"
 
 # after: ordering between workspaces of one run
 cat > "$R/after.yml" <<'Y'
@@ -179,7 +183,7 @@ stacks:
       "prod-*": { after: ["stg-*"] }
 Y
 run after.yml "" ""
-eq "after: predecessors come first in the matrix" "$(sed -n 's/^matrix=//p' "$T/out" | jq -r '[.include[].label] | join(",")' | tr ',' '\n' | grep -nE 'stg|prod|dr-' | cut -d: -f2 | tr '\n' ',')" "stg-us-west-2,prod-us-west-1,dr-us-east-1,"
+eq "after: predecessors come first in the matrix" "$(mlabels | grep -nE 'stg|prod|dr-' | cut -d: -f2 | tr '\n' ',')" "stg-us-west-2,prod-us-west-1,dr-us-east-1,"
 eq "after: wait_for lists the resolved predecessor labels" "$(field dr-us-east-1 wait_for)" "prod-us-west-1"
 eq "after: a workspace with no predecessors waits for nothing" "$(field dev-us-east-1 wait_for)" ""
 eq "after: chains resolve" "$(field prod-us-west-1 wait_for)" "stg-us-west-2"
@@ -256,14 +260,14 @@ cat > "$R/nt.yml" <<'Y'
 stacks: [{ name: s, dir: ., workspaces: [a, b], overrides: { a: { notify_template: .github/tfpls/slack.jq } } }]
 Y
 run nt.yml "" ""
-eq "notify_template is carried into the entry (empty when unset)" "$(sed -n 's/^entries=//p' "$T/out" | jq -r '[.[]] | sort_by(.workspace) | map(.notify_template) | join("|")')" ".github/tfpls/slack.jq|"
+eq "notify_template is carried into the entry (empty when unset)" "$(by_ws notify_template)" ".github/tfpls/slack.jq|"
 
 # drift_fix: on by default, off per workspace
 cat > "$R/df.yml" <<'Y'
 stacks: [{ name: s, dir: ., workspaces: [a, b], overrides: { b: { drift_fix: false } } }]
 Y
 run df.yml "" ""
-eq "drift_fix defaults to true and can be switched off per workspace" "$(sed -n 's/^entries=//p' "$T/out" | jq -r '[.[]] | sort_by(.workspace) | map(.drift_fix) | join("|")')" "true|false"
+eq "drift_fix defaults to true and can be switched off per workspace" "$(by_ws drift_fix)" "true|false"
 
 # ---- first-run friendliness: labels, overrides by stack name, warnings
 mkdir -p "$R/envs/dev" "$R/envs/prod"; echo x > "$R/envs/dev/a.tf"; echo x > "$R/envs/prod/a.tf"
@@ -276,12 +280,12 @@ overrides:
   "nothing-*": { auto_apply: always }
 Y
 run envs.yml "" ""
-eq "separate root modules with the tofu workspace default: the label is the stack name" "$(sed -n 's/^matrix=//p' "$T/out" | jq -r '[.include[].label] | sort | join(",")')" "dev,prod"
-eq "an override pattern also matches the stack name" "$(sed -n 's/^entries=//p' "$T/out" | jq -r '.prod.drift_fix')" "false"
+eq "separate root modules with the tofu workspace default: the label is the stack name" "$(mlabels | LC_ALL=C sort | paste -sd, -)" "dev,prod"
+eq "an override pattern also matches the stack name" "$(efields prod drift_fix)" "false"
 eq "configured counts every workspace, changed or not" "$(sed -n 's/^configured=//p' "$T/out")" "2"
 case "$OUT" in *'override "nothing-*" matches no workspace and no stack name'*) ok "an override that matches nothing is a warning";; *) bad "no unmatched-override warning: $OUT";; esac
 run envs.yml "dev" ""
-eq "a stack is selected by its label, and the label does not change with the selection" "$(sed -n 's/^matrix=//p' "$T/out" | jq -r '[.include[].label] | join(",")')" "dev"
+eq "a stack is selected by its label, and the label does not change with the selection" "$(mlabels | paste -sd, -)" "dev"
 printf 'stacks: [{ name: s, dir: ., workspaces: [] }]\n' > "$R/empty.yml"; run empty.yml "" ""
 case "$OUT" in *"no workspaces found"*) ok "no workspaces at all is a warning that says how to describe the layout";; *) bad "no-workspaces warning missing: $OUT";; esac
 eq "and configured is 0" "$(sed -n 's/^configured=//p' "$T/out")" "0"
@@ -296,6 +300,5 @@ gt switch -q main; commit_change workspaces/qa/main.tf     # the base branch mov
 gt merge -q --no-ff -m "merge ref" pr >/dev/null             # what the merge ref of the pull request looks like
 run none.yml "" "$M0";            eq "stale base, no head_ref: what the base branch gained is counted too (unchanged default)" "$(wss)" "dev,qa,stg"
 run none.yml "" "$M0" "$PRHEAD";  eq "stale base with head_ref: only the pull request's own changes select, both of its workspaces" "$(wss)" "dev,stg"
-eq "plan.yml gives the detect step the pull request's own head" "$(yq -r '.jobs.detect.steps[] | select(.id == "d") | .with.head_ref' "$here/../.github/workflows/plan.yml")" '${{ github.event.pull_request.head.sha }}'
 
 done_tests

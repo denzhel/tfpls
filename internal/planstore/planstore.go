@@ -279,7 +279,7 @@ func readTgz(tgz []byte) (map[string][]byte, error) {
 	return files, nil
 }
 
-// metaField is jq -r '.k // ""' for a top-level key of the meta file.
+// metaField is the raw `.k // ""` for a top-level key of the meta file.
 func metaField(m map[string]any, k string) string {
 	switch v := m[k].(type) {
 	case nil:
@@ -332,7 +332,7 @@ type artifact struct {
 	} `json:"workflow_run"`
 }
 
-// expired follows jq truthiness: null and false are not expired.
+// expired follows the truthiness of the former shell version: null and false are not expired.
 func (a artifact) expired() bool {
 	b, isBool := a.Expired.(bool)
 	return a.Expired != nil && (!isBool || b)
@@ -406,7 +406,7 @@ func Lookup(env Env, repo, name string) (string, error) {
 	return "", fail(1, "no reviewed plan found (%s)", name)
 }
 
-// newest is the last of the greatest created_at (jq: sort_by | reverse | .[0]).
+// newest is the last of the greatest created_at (sort_by | reverse | .[0]).
 func newest(as []artifact) *artifact {
 	var best *artifact
 	for i := range as {

@@ -9,14 +9,13 @@ TFPLS="$(mktemp -d)/tfpls"; build_bin tfpls "$TFPLS" || { echo "go build failed"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/fx"
 
-# gh stub: `gh api <path> [--paginate] [--jq expr] [-X GET -f k=v]` -> the fixture of that path (through jq when --jq is given)
+# gh stub: `gh api <path> [--paginate] [-X GET -f k=v]` -> the fixture of that path (the gate reads the JSON itself: it passes no --jq)
 cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 [ "$1" = api ] || exit 1
-shift; path=; jqx=
+shift; path=
 while [ $# -gt 0 ]; do
   case "$1" in
-    --jq) jqx=$2; shift;;
     -X|-f|-F) shift;;
     --paginate) ;;
     -*) ;;
@@ -33,7 +32,7 @@ case "$path" in
   *) exit 1;;
 esac
 [ -f "$FX/$f" ] || { [ "${f%%-*}" = runs ] && echo '{"workflow_runs":[]}' > "$FX/$f" || exit 1; }
-if [ -n "$jqx" ]; then jq -r "$jqx" "$FX/$f"; else cat "$FX/$f"; fi
+cat "$FX/$f"
 STUB
 chmod +x "$T/bin/gh"
 export FX="$T/fx" PATH="$T/bin:$PATH" REPO=o/r ISSUE=7 GH_TOKEN=x TFPLS_NOW=2026-10-17T12:00:00Z
@@ -45,11 +44,12 @@ SKELETON=$'### Outcome\n\nx\n\n### Tasks\n\n- [ ] \n\n### Acceptance criteria\n\
 STUB51=$'### Outcome\n\nUpgrade what\'s needed\n\n### Tasks\n\n- [ ] \n\n### Acceptance criteria\n\n- [ ] \n\n### Test criteria\n\n- [ ] Local: \n- [ ] Sandbox (GitHub): \n- [ ] Negative case: \n\n### Dependencies\n\nNone\n\n### Context and out of scope\n\ntofu / apply / detect: Node.js 20 is deprecated.\n\nI\'m getting these - lets fix that please'
 crlf() { printf '%s' "${1//$'\n'/$'\r\n'}"; }
 issue() { # assoc labels(comma) body
-  jq -n --arg a "$1" --arg l "$2" --arg b "$3" '{number:7,title:"feat: a thing",body:$b,author_association:$a,user:{login:"someone"},
-    labels:(if $l == "" then [] else ($l | split(",") | map({name:.})) end)}' > "$FX/issue.json"
+  local l lj="" IFS=,
+  for l in $2; do lj="$lj${lj:+,}{\"name\":\"$l\"}"; done
+  printf '{"number":7,"title":"feat: a thing","body":%s,"author_association":"%s","user":{"login":"someone"},"labels":[%s]}\n' "$(json_str "$3")" "$1" "$lj" > "$FX/issue.json"
 }
 comments() { printf '%s' "${1:-[]}" > "$FX/comments.json"; }
-c() { jq -n --arg l "$1" --arg t "$2" --arg a "$3" --arg b "$4" '{user:{login:$l,type:$t},author_association:$a,body:$b,created_at:"2026-10-17T10:00:00Z"}'; }
+c() { printf '{"user":{"login":"%s","type":"%s"},"author_association":"%s","body":%s,"created_at":"2026-10-17T10:00:00Z"}\n' "$1" "$2" "$3" "$(json_str "$4")"; }
 gate() { # phase [VAR=value ...]  -> rc, run, reason, mode, label and said (the status comment the workflow would post, if any)
   local p=$1 cf; shift
   rm -rf "$T/w"; mkdir -p "$T/w"; : > "$T/gho"
@@ -288,7 +288,7 @@ cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "issue comment") shift 2; while [ $# -gt 0 ]; do [ "$1" = --body ] && printf '%s' "$2" > "$FX/posted.md"; shift; done; exit "${STUB_COMMENT_RC:-0}";;
-  "issue view") jq -nc --arg l "${STUB_LABELS:-}" '{labels: ($l | split(",") | map(select(. != "") | {name: .}))}'; exit 0;;
+  "issue view") out=; IFS=,; for l in ${STUB_LABELS:-}; do out="$out${out:+,}{\"name\":\"$l\"}"; done; printf '{"labels":[%s]}\n' "$out"; exit 0;;
   "pr list") [ -n "${STUB_PR:-}" ] && echo '[{"number":5,"url":"https://x/pull/5"}]'; exit 0;;
 esac
 exit 1

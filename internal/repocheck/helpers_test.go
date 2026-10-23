@@ -79,7 +79,7 @@ func load(t testing.TB, rel string) any {
 	return v
 }
 
-// at follows map keys; a missing key or a non-map on the way gives nil (like yq's null).
+// at follows map keys; a missing key or a non-map on the way gives nil (like a null).
 func at(v any, path ...string) any {
 	for _, k := range path {
 		m, ok := v.(map[string]any)
@@ -91,7 +91,7 @@ func at(v any, path ...string) any {
 	return v
 }
 
-// str renders a value the way `yq -r` prints it: null for nil, a string as is, anything else with its default format.
+// str renders a value the way a raw print shows it: null for nil, a string as is, anything else with its default format.
 func str(v any) string {
 	switch x := v.(type) {
 	case nil:
@@ -102,7 +102,7 @@ func str(v any) string {
 	return fmt.Sprint(v)
 }
 
-// orEmpty is yq's `// ""`: null and false become an empty string.
+// orEmpty is the `// ""` default: null and false become an empty string.
 func orEmpty(v any) string {
 	if v == nil || v == false {
 		return ""

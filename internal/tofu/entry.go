@@ -31,7 +31,7 @@ var settingKeys = []struct {
 	{"POLICY_PARAMS", "policy_params", func(s *Settings) *string { return &s.PolicyParams }},
 }
 
-// entryText is jq's `.[$k] // "" | tostring`: null and false are "", a string is itself, a number or true its JSON text and a
+// entryText is `.[$k] // "" | tostring` of the former shell version: null and false are "", a string is itself, a number or true its JSON text and a
 // structure its compact JSON.
 func entryText(raw json.RawMessage) string {
 	var v any

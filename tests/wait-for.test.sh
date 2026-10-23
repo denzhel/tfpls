@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Tests for `tfpls wait-for` (actions/wait-for) with a gh stub that serves a scripted sequence of job lists.
 set -uo pipefail
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; mkdir -p "$T/bin"
 build_bin tfpls "$T/tfpls" || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
@@ -48,6 +47,5 @@ run prod; eq "the default matrix job name 'apply (prod)' matches" "$rc" 0
 printf '%s\n' '{"name":"apply (preprod)","status":"completed","conclusion":"success"}' > "$T/seq/1"
 run prod 0; eq "'apply (preprod)' does not match prod" "$rc" 1
 
-eq "action.yml installs the binary, then runs tfpls wait-for" "$(yq -r '.runs.steps[0].uses' "$here/actions/wait-for/action.yml")|$(yq -r '.runs.steps[1].run' "$here/actions/wait-for/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls wait-for"
 
 done_tests

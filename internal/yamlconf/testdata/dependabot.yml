@@ -1,0 +1,53 @@
+# Dependabot version updates for the actions tfpls pins. Every update is a pull request that CI must pass and a maintainer
+# reviews; nothing merges by itself. Decisions and the official pages behind them: docs/dependencies.md#dependabot.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    # "/" reads .github/workflows (and a root action.yml); every other directory has its own *.yml read, so the
+    # composite actions (actions/<name>/action.yml) are only covered when they are listed
+    directories:
+      - "/"
+      - "/actions/*"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    # a release is proposed only once it is 5 days old (GitHub's default is 3); github-actions supports default-days only
+    cooldown:
+      default-days: 5
+    groups:
+      # minor and patch updates of all actions: one pull request, across all directories
+      actions-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      # each major update on its own: one pull request per action, across all directories
+      actions-major:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [major]
+        group-by: dependency-name
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: deps
+  # the Go module (go.mod, go.sum at the repository root); same quiet time and cooldown as the actions
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    cooldown:
+      default-days: 5
+    groups:
+      go-minor-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: deps

@@ -1,0 +1,23 @@
+name: tfpls setup
+description: Install OpenTofu and conftest (retried downloads, SHA-256 verified, cached on the runner)
+inputs:
+  tofu_version:
+    description: "OpenTofu version. Empty = the version the repository asks for (.opentofu-version, .tofu-version, .terraform-version or an exact required_version), else 1.13.2"
+    default: ""
+  conftest_version:
+    description: conftest version
+    default: "0.71.1"
+  conftest:
+    description: "install conftest (only needed when the workspace has a policy_dir or policy_packs)"
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: denzhel/tfpls/actions/bin@main
+    - name: Install OpenTofu and conftest
+      shell: bash
+      env:
+        TOFU_VERSION: ${{ inputs.tofu_version }}
+        CONFTEST_VERSION: ${{ inputs.conftest_version }}
+        INSTALL_CONFTEST: ${{ inputs.conftest }}
+      run: tfpls setup

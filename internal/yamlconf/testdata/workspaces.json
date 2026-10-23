@@ -1,0 +1,1 @@
+{"defaults":{"region":"eu-west-1","tofu_version":"1.13.2"},"ignore":["**/*.md","!keep.md"],"version":1,"workspaces":[{"depends_on":[],"env":{"ENABLED":true,"MY_VAR_X":"1"},"name":"network","path":"stacks/network"},{"depends_on":["network"],"labels":["a","b"],"path":"stacks/app","timeout":30}]}
