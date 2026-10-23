@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# tools/agent-gate.sh: every decision that keeps the issue agent from costing money when it is not needed, the status comments that keep
+# tfpls gate (internal/gate): every decision that keeps the issue agent from costing money when it is not needed, the status comments that keep
 # it from being silent (once per reason, each with what happens next), the run caps, and the trusted copy of the issue (text from outside
-# the project reaches the agent only as fenced data in proposal mode). `gh` is a stub that serves fixtures. Also tools/agent-report.sh.
+# the project reaches the agent only as fenced data in proposal mode). `gh` is a stub that serves fixtures. Also tfpls agent-report.
 # Run: bash tests/agent-gate.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-G="$here/tools/agent-gate.sh"
+TFPLS="$(mktemp -d)/tfpls"; (cd "$here" && go build -o "$TFPLS" ./cmd/tfpls) || { echo "go build failed"; exit 1; }
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/fx"
@@ -54,7 +54,7 @@ c() { jq -n --arg l "$1" --arg t "$2" --arg a "$3" --arg b "$4" '{user:{login:$l
 gate() { # phase [VAR=value ...]  -> rc, run, reason, mode, label and said (the status comment the workflow would post, if any)
   local p=$1 cf; shift
   rm -rf "$T/w"; mkdir -p "$T/w"; : > "$T/gho"
-  env GITHUB_OUTPUT="$T/gho" AGENT_WORK="$T/w" "$@" bash "$G" "$p" > "$T/log" 2>&1; rc=$?
+  env GITHUB_OUTPUT="$T/gho" AGENT_WORK="$T/w" "$@" "$TFPLS" gate "$p" > "$T/log" 2>&1; rc=$?
   run=$(sed -n 's/^run=//p' "$T/gho"); reason=$(sed -n 's/^reason=//p' "$T/gho")
   mode=$(sed -n 's/^mode=//p' "$T/gho"); label=$(sed -n 's/^label=//p' "$T/gho")
   said=""; cf=$(sed -n 's/^comment_file=//p' "$T/gho"); [ -n "$cf" ] && said=$(cat "$cf")
@@ -283,49 +283,58 @@ gate elaborate EVENT_NAME=issue_comment ACTOR_ASSOC=OWNER COMMENT_BODY="answer";
 rm -f "$FX/issue.json"; gate elaborate EVENT_NAME=issues; eq "an issue that cannot be read fails the gate job" "$rc|$run" "1|"
 reset
 
-# ---- the run report (tools/agent-report.sh): turns, seconds and cost, marker for the cap, what happens next, never fails the job
-RP="$here/tools/agent-report.sh"
+# ---- the run report (tfpls agent-report): turns, seconds and cost, marker for the cap, what happens next, never fails the job
+
 cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1 $2" in
   "issue comment") shift 2; while [ $# -gt 0 ]; do [ "$1" = --body ] && printf '%s' "$2" > "$FX/posted.md"; shift; done; exit "${STUB_COMMENT_RC:-0}";;
-  "issue view") echo "${STUB_LABELS:-}"; exit 0;;
-  "pr list") [ -n "${STUB_PR:-}" ] && echo "pull request #5: https://x/pull/5"; exit 0;;
+  "issue view") jq -nc --arg l "${STUB_LABELS:-}" '{labels: ($l | split(",") | map(select(. != "") | {name: .}))}'; exit 0;;
+  "pr list") [ -n "${STUB_PR:-}" ] && echo '[{"number":5,"url":"https://x/pull/5"}]'; exit 0;;
 esac
 exit 1
 STUB
 printf '%s\n' '{"type":"system"}' '{"type":"result","num_turns":14,"duration_ms":183400,"total_cost_usd":0.4567}' > "$T/exec.jsonl"
-rm -f "$FX/posted.md"; env PHASE=implement ISSUE=7 REPO=o/r RUN_URL=http://run OUTCOME=success EXEC="$T/exec.jsonl" GITHUB_STEP_SUMMARY="$T/sum" bash "$RP" >/dev/null 2>&1; rc=$?
+rm -f "$FX/posted.md"; env PHASE=implement ISSUE=7 REPO=o/r RUN_URL=http://run OUTCOME=success EXEC="$T/exec.jsonl" GITHUB_STEP_SUMMARY="$T/sum" "$TFPLS" agent-report >/dev/null 2>&1; rc=$?
 eq "the report is posted with turns, seconds, cost and the cap marker" "$rc|$(grep -c '14 turns, 183 s, cost 0.46 USD' "$FX/posted.md")|$(grep -c '<!-- tfpls-agent-run: implement -->' "$FX/posted.md")" "0|1|1"
 grep -q "14 turns" "$T/sum" && ok "the same line goes to the run summary" || bad "summary line"
-rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=failure EXEC="$T/missing.json" bash "$RP" >/dev/null 2>&1
+rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=failure EXEC="$T/missing.json" "$TFPLS" agent-report >/dev/null 2>&1
 eq "a run without an execution file says the agent produced no result and still counts toward the cap" "$(grep -c 'the agent produced no result' "$FX/posted.md")|$(grep -c 'failure' "$FX/posted.md")|$(grep -c 'tfpls-agent-run: elaborate' "$FX/posted.md")" "1|1|1"
 grep -q '^\*\*Next:\*\* the run did not finish' "$FX/posted.md" && ok "... and says what to do next" || bad "next line of a failed run: $(cat "$FX/posted.md")"
-STUB_COMMENT_RC=1 env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success bash "$RP" >/dev/null 2>&1; eq "a failing comment never fails the job" "$?" "0"
+STUB_COMMENT_RC=1 env PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success "$TFPLS" agent-report >/dev/null 2>&1; eq "a failing comment never fails the job" "$?" "0"
 # what happens next follows the labels the agent left
 nextline() { grep '^\*\*Next:\*\*' "$FX/posted.md"; }
 lastline() { grep -v '^<!-- tfpls-agent-run' "$FX/posted.md" | grep -v '^[[:space:]]*$' | tail -n 1; }
-rm -f "$FX/posted.md"; env STUB_LABELS=needs-info PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" bash "$RP" >/dev/null 2>&1
+rm -f "$FX/posted.md"; env STUB_LABELS=needs-info PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" "$TFPLS" agent-report >/dev/null 2>&1
 { nextline | grep -q 'answer' && nextline | grep -q 'runs the agent again' && [ "$(lastline)" = "$(nextline)" ]; } && ok "with needs-info the last line says: answer, and an answer runs the agent again" || bad "needs-info next: $(cat "$FX/posted.md")"
-rm -f "$FX/posted.md"; env STUB_LABELS=type:feature,ready PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" bash "$RP" >/dev/null 2>&1
+rm -f "$FX/posted.md"; env STUB_LABELS=type:feature,ready PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" "$TFPLS" agent-report >/dev/null 2>&1
 { nextline | grep -q '`/implement`' && nextline | grep -q 'owner'; } && ok "with ready the last line says: the owner comments /implement" || bad "ready next: $(cat "$FX/posted.md")"
-rm -f "$FX/posted.md"; env STUB_LABELS= MODE=proposal PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" bash "$RP" >/dev/null 2>&1
+rm -f "$FX/posted.md"; env STUB_LABELS= MODE=proposal PHASE=elaborate ISSUE=7 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" "$TFPLS" agent-report >/dev/null 2>&1
 { nextline | grep -q 'proposal' && nextline | grep -q 'unchanged'; } && ok "in proposal mode the last line says the body is unchanged and what a maintainer does" || bad "proposal next: $(cat "$FX/posted.md")"
 # a "success" that did nothing is never silent: denied tool calls, the agent's last words, and whether a pull request exists
 printf '%s\n' '{"type":"result","num_turns":28,"duration_ms":60000,"total_cost_usd":0.35,"result":"I could not push the branch.","permission_denials":[{"tool_name":"Bash","tool_input":{"command":"git stash"}},{"tool_name":"Write","tool_input":{"file_path":"AGENTS.md"}}]}' > "$T/exec2.json"
-rm -f "$FX/posted.md"; env PHASE=implement ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec2.json" bash "$RP" >/dev/null 2>&1
+rm -f "$FX/posted.md"; env PHASE=implement ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec2.json" "$TFPLS" agent-report >/dev/null 2>&1
 { grep -q '2 tool call(s) were denied' "$FX/posted.md" && grep -q '`Bash`: git stash' "$FX/posted.md" && grep -q '`Write`: AGENTS.md' "$FX/posted.md"; } && ok "the denied tool calls are listed in the report" || bad "denials: $(cat "$FX/posted.md")"
 grep -q 'No pull request was opened for this run' "$FX/posted.md" && ok "an implementation without a pull request says so" || bad "no-PR note missing"
 grep -q 'I could not push the branch' "$FX/posted.md" && ok "the agent's last words are included" || bad "last words missing"
 { nextline | grep -q '/implement' && [ "$(lastline)" = "$(nextline)" ]; } && ok "... and the last line says how to try again" || bad "no-PR next: $(cat "$FX/posted.md")"
-rm -f "$FX/posted.md"; env STUB_PR=1 PHASE=implement ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" bash "$RP" >/dev/null 2>&1
+rm -f "$FX/posted.md"; env STUB_PR=1 PHASE=implement ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" "$TFPLS" agent-report >/dev/null 2>&1
 { grep -q 'pull request #5: https://x/pull/5' "$FX/posted.md" && ! grep -q 'No pull request' "$FX/posted.md" && ! grep -q 'denied' "$FX/posted.md"; } && ok "with a pull request the report links it and shows no denials" || bad "pr report: $(cat "$FX/posted.md")"
 nextline | grep -q 'reviews the pull request' && ok "... and the last line says the owner reviews it" || bad "pr next: $(cat "$FX/posted.md")"
-rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" bash "$RP" >/dev/null 2>&1
+rm -f "$FX/posted.md"; env PHASE=elaborate ISSUE=26 REPO=o/r OUTCOME=success EXEC="$T/exec.jsonl" "$TFPLS" agent-report >/dev/null 2>&1
 { ! grep -q 'pull request' "$FX/posted.md"; } && ok "an elaboration report never talks about a pull request (negative case)" || bad "elaborate mentions a PR"
 eq "every report has exactly one line that says what happens next" "$(grep -c '^\*\*Next:\*\*' "$FX/posted.md")" "1"
 
+# ---- fail closed (the Bash gate failed open in each of these)
+reset; gate elaborate EVENT_NAME=issues MAX_ELAB_ISSUE=three; eq "a cap variable that is not an integer fails the gate (the cap never fails open)" "$rc|$run" "1|"
+has "$(cat "$T/log")" "::error::" && ok "... with an error annotation that names the variable" || bad "cap error: $(cat "$T/log")"
+reset; gate elaborate EVENT_NAME=issues MAX_ELAB_DAY=-1; eq "a negative daily limit fails the gate" "$rc|$run" "1|"
+reset; rm -f "$FX/comments.json"; gate elaborate EVENT_NAME=issues; eq "comments that cannot be read fail the gate (they carry the per-issue cap)" "$rc|$run" "1|"
+reset; printf '<html>' > "$FX/runs-claude-elaborate.yml.json"; gate elaborate EVENT_NAME=issues; eq "a list of runs that is not JSON fails the gate (the daily cap)" "$rc|$run" "1|"
+reset; printf '<html>' > "$FX/issue.json"; gate elaborate EVENT_NAME=issues; eq "an issue that is not JSON fails the gate instead of becoming an outsider's" "$rc|$run" "1|"
+reset
+
 # ---- usage
-bash "$G" bogus >/dev/null 2>&1; [ $? -eq 2 ] && ok "an unknown phase is a usage error" || bad "usage"
+"$TFPLS" gate bogus >/dev/null 2>&1; [ $? -eq 2 ] && ok "an unknown phase is a usage error" || bad "usage"
 
 done_tests

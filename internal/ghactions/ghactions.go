@@ -39,11 +39,14 @@ func (r *Runner) appendTo(envVar, text string) error {
 
 // keyValue renders `name=value`, or the heredoc form when the value has a line break. The delimiter is random and is
 // guaranteed not to occur in the value, so a value can never end its own block and forge a second output or variable.
-func keyValue(name, value string) (string, error) {
+func keyValue(name, value string) (string, error) { return keyValueForce(name, value, false) }
+
+// keyValueForce is keyValue that can insist on the heredoc form even for a one-line value.
+func keyValueForce(name, value string, heredoc bool) (string, error) {
 	if name == "" || strings.ContainsAny(name, "=\r\n") {
 		return "", fmt.Errorf("invalid name %q", name)
 	}
-	if !strings.ContainsAny(value, "\r\n") {
+	if !heredoc && !strings.ContainsAny(value, "\r\n") {
 		return name + "=" + value + "\n", nil
 	}
 	for {
@@ -65,6 +68,15 @@ func (r *Runner) SetOutput(name, value string) error {
 
 // SetEnv sets an environment variable for the following steps ($GITHUB_ENV).
 func (r *Runner) SetEnv(name, value string) error { return r.keyValueTo("GITHUB_ENV", name, value) }
+
+// SetEnvBlock is SetEnv in the heredoc form for every value (what a consumer that reads the file line by line expects).
+func (r *Runner) SetEnvBlock(name, value string) error {
+	s, err := keyValueForce(name, value, true)
+	if err != nil {
+		return err
+	}
+	return r.appendTo("GITHUB_ENV", s)
+}
 
 func (r *Runner) keyValueTo(envVar, name, value string) error {
 	s, err := keyValue(name, value)

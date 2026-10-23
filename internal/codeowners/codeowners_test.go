@@ -1,6 +1,7 @@
 package codeowners
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,5 +168,33 @@ func TestCommentIDMustBeNumeric(t *testing.T) {
 	Enforce(e)
 	if b, _ := os.ReadFile(log); strings.Contains(string(b), "reactions") {
 		t.Errorf("non-numeric comment id reached the API: %s", b)
+	}
+}
+
+// DefaultEnv reads the reviews itself (no helper script): only reviews of people with write access count.
+func TestDefaultEnvReviewsCountOnlyWriters(t *testing.T) {
+	dir := t.TempDir()
+	stub := `#!/bin/sh
+case "$*" in
+  *permission*) case "$*" in *alice*) echo write;; *) echo read;; esac;;
+  *reviews*) echo '[{"user":{"login":"alice","type":"User"},"state":"APPROVED","commit_id":"abc","submitted_at":"2026-01-01T00:00:00Z"},{"user":{"login":"mallory","type":"User"},"state":"APPROVED","commit_id":"abc","submitted_at":"2026-01-01T00:00:01Z"},{"user":{"login":"bot","type":"Bot"},"state":"APPROVED","commit_id":"abc","submitted_at":"2026-01-01T00:00:02Z"}]';;
+esac
+`
+	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := DefaultEnv().Reviews("o/r", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []struct {
+		User struct{ Login string } `json:"user"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("not JSON: %s", out)
+	}
+	if len(got) != 1 || got[0].User.Login != "alice" {
+		t.Errorf("only alice (write access) may count, got %s", out)
 	}
 }

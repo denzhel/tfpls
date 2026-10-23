@@ -8,12 +8,11 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/denzhel/tfpls/internal/approvals"
 	"github.com/denzhel/tfpls/internal/gh"
 	"github.com/denzhel/tfpls/internal/ghactions"
 )
@@ -248,11 +247,18 @@ type Env struct {
 	Reviews func(repo, pr string) ([]byte, error) // the reviews that may count (people with write access)
 }
 
-// DefaultEnv is the real environment. The reviews come from actions/approvals/reviews.sh next to this action.
+// DefaultEnv is the real environment. The reviews that may count come from approvals.Reviews (people with write access).
 func DefaultEnv() Env {
-	return Env{Getenv: os.Getenv, Runner: ghactions.New(), Stdout: os.Stdout, Reviews: func(repo, pr string) ([]byte, error) {
-		dir := os.Getenv("GITHUB_ACTION_PATH")
-		return exec.Command(filepath.Join(dir, "..", "approvals", "reviews.sh"), repo, pr).Output()
+	client := gh.Client{}
+	return Env{Getenv: os.Getenv, Runner: ghactions.New(), GH: client, Stdout: os.Stdout, Reviews: func(repo, pr string) ([]byte, error) {
+		counted, _, err := approvals.Reviews(approvals.Env{Getenv: os.Getenv, Stdout: io.Discard, Stderr: io.Discard, GH: client}, repo, pr)
+		if err != nil {
+			return nil, err
+		}
+		if counted == nil {
+			counted = []approvals.Review{}
+		}
+		return json.Marshal(counted)
 	}}
 }
 

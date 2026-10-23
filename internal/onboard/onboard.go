@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-// TofuDefault is the default of actions/setup (tests/onboard.test.sh keeps the two equal).
+// TofuDefault is the default of tfpls setup (tests/onboard.test.sh keeps the two equal).
 const TofuDefault = "1.13.1"
 
 // Env is everything Run needs from the outside, so that it can be tested.

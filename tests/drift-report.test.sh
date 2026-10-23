@@ -67,21 +67,8 @@ PLAN_TEXT="$BIG" step terraform/pl drift 2026-10-10T12:00:00Z
 PLAN_TEXT="" step terraform/pl drift 2026-10-10T13:00:00Z
 eq "an empty plan text leaves the table only (the run does not fail)" "$tr_|$(grep -c '<details>' "$B")|$(grep -c '^| Since |' "$B")" "none|0|1"
 
-# the real outml() of run.sh: a plan line cannot end the output early or add another output
-sed -n '/^outml() /p' "$here/actions/tofu/run.sh" > "$T/outml.sh"
-GITHUB_OUTPUT="$T/gho2"; : > "$GITHUB_OUTPUT"
-# shellcheck disable=SC1091
-. "$T/outml.sh"
-outml plan_text $'line one\nghost=1\nTFPLS_deadbeef\nlast line'
-first=$(head -1 "$GITHUB_OUTPUT"); lastl=$(tail -1 "$GITHUB_OUTPUT"); delim=${first#plan_text<<}
-{ [ "${first%%<<*}" = plan_text ] && [ "$lastl" = "$delim" ] && [ "$(grep -cF "$delim" "$GITHUB_OUTPUT")" = 2 ]; } && ok "a multi-line output is wrapped in a delimiter that occurs only at its two ends" || bad "outml layout: $(cat "$GITHUB_OUTPUT")"
-eq "the plan lines (even one that looks like an output) stay inside the block" "$(sed -n '2,5p' "$GITHUB_OUTPUT" | tr '\n' '|')" "line one|ghost=1|TFPLS_deadbeef|last line|"
-: > "$GITHUB_OUTPUT"; outml plan_text a; d1=$(head -1 "$GITHUB_OUTPUT"); : > "$GITHUB_OUTPUT"; outml plan_text a; d2=$(head -1 "$GITHUB_OUTPUT")
-[ "$d1" != "$d2" ] && ok "the delimiter is random for every output" || bad "same delimiter twice"
-
 # the tofu action hands the plan to the report step as an output, not as a file left on the runner
-RUN="$here/actions/tofu/run.sh"
-grep -q 'plan_text_out' "$RUN" && grep -q 'outml plan_text' "$RUN" && grep -q 'plan_text:' "$here/actions/tofu/action.yml" && ok "the tofu action has a plan_text output" || bad "plan_text output missing"
+grep -q 'plan_text:' "$here/actions/tofu/action.yml" && ok "the tofu action has a plan_text output" || bad "plan_text output missing"
 eq "drift.yml passes plan_text to the drift report" "$(grep -c 'plan_text: ${{ steps.t.outputs.plan_text }}' "$here/.github/workflows/drift.yml")" "1"
 grep -q 'PLAN_TEXT: ${{ inputs.plan_text }}' "$here/actions/drift-report/action.yml" && ok "the drift-report action passes plan_text to tfpls drift-report" || bad "plan_text not wired in drift-report"
 

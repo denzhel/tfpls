@@ -60,6 +60,7 @@ outputs:
 runs:
   using: composite
   steps:
+    - uses: denzhel/tfpls/actions/bin@main
     - id: run
       shell: bash
       env:
@@ -78,7 +79,8 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
         REPO_ROOT: ${{ github.workspace }}
         RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: ${{ github.action_path }}/run.sh
+        POLICY_LIBRARY: ${{ github.action_path }}/../../policies/library
+      run: tfpls tofu
     - name: Upload reviewed plan
       if: steps.run.outputs.plan_path != ''
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

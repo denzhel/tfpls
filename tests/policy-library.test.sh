@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests for policies/library/*: every pack must fail on a bad plan and stay quiet on a good one.
-# Needs conftest (found on PATH, in $TFPLS_CONFTEST, or downloaded once with actions/setup/install.sh).
+# Needs conftest (found on PATH, in $TFPLS_CONFTEST, or downloaded once with tfpls setup).
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 L="$here/policies/library"
@@ -12,7 +12,7 @@ if [ -z "$C" ]; then
   C=$(find "${RUNNER_TOOL_CACHE:-$HOME/.cache}" -path '*conftest*' -name conftest -type f 2>/dev/null | head -1)
 fi
 if [ -z "$C" ]; then
-  TFPLS_TOOL_CACHE="$T/cache" GITHUB_PATH="$T/path" bash "$here/actions/setup/install.sh" >/dev/null 2>&1 || true
+  (cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) && TFPLS_TOOL_CACHE="$T/cache" GITHUB_PATH="$T/path" INSTALL_CONFTEST=true "$T/tfpls" setup >/dev/null 2>&1 || true
   C=$(find "$T/cache" -name conftest -type f 2>/dev/null | head -1)
 fi
 [ -n "$C" ] || { echo "conftest not available"; exit 1; }

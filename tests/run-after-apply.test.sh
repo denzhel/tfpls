@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# The apply after a merge (apply.yml) when `/tofu apply` already applied the workspace: the real actions/tofu/run.sh with a stub
+# The apply after a merge (apply.yml) when `/tofu apply` already applied the workspace: the real `tfpls tofu` with a stub
 # gh, tofu and git. The consumed reviewed plan is not tried again; one plan confirms that nothing is left, and one compact
 # comment is posted. A merge without a prior apply, a commit planned after the apply, no pull request number, a stranger's
 # comment and a failing API behave as before. Run: bash tests/run-after-apply.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$here/tests/lib.sh"
-. "$here/actions/tofu/plan-store.sh"
+. "$here/tests/plan-store-shim.sh"   # tfpls_pack for the fixture plan (the store itself is Go)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin"
+# the binary under test; the shell of the test packs its fixture plan with the same one
+(cd "$here" && go build -o "$T/bin/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+export TFPLS_PLAN_STORE_BIN="$T/bin/tfpls"
 SHA=abcdef0123456789abcdef0123456789abcdef01
 RUN=https://github.com/o/r/actions/runs   # this run is $RUN/222; the /tofu apply run in the comments is $RUN/111
 
@@ -117,7 +120,7 @@ go() {
     RUNNER_TEMP="$T/tmp" REPO_ROOT="$T/repo" RUN_URL="$RUN/222" GH_TOKEN=x \
     ENTRY='{"name":"terraform/dev","label":"dev","dir":"stack","workspace":"","auto_apply":"always"}' \
     TARGETS="" APPLY=auto PR=7 PLAN_MODE=reviewed HEAD_SHA="$SHA" "$@" \
-    bash "$here/actions/tofu/run.sh" > "$T/out" 2>&1
+    "$T/bin/tfpls" tofu > "$T/out" 2>&1
   rc=$?
 }
 st()      { grep '^status=' "$T/gho" | tail -1 | cut -d= -f2-; }
