@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Tests for actions/queue/queue.sh: strict FIFO per workspace, crashed holders, no cancellation.
+# Tests for `tfpls queue` (actions/queue): strict FIFO per workspace, crashed holders, no cancellation.
 # A local bare repository stands in for GitHub; a gh stub reports which runs are still active.
 set -uo pipefail
 export TFPLS_RETRY_SLEEP=0   # retries pause randomly in the scripts under test; the tests do not wait
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-Q="$here/actions/queue/queue.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'pkill -P $$ 2>/dev/null; rm -rf "$T"' EXIT
+(cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+Q="$T/tfpls"
 git init -q --bare "$T/remote.git"; mkdir -p "$T/bin" "$T/active"
 # gh stub: runs/<id> is "completed" unless $T/active/<id> exists; comments are logged
 cat > "$T/bin/gh" <<'STUB'
@@ -21,7 +22,7 @@ chmod +x "$T/bin/gh"
 export TFPLS_REMOTE_URL="$T/remote.git" TFPLS_POLL=1 STUB_DIR="$T" PATH="$T/bin:$PATH" REPO=o/r RUN_URL=http://run BRANCH=tfpls-data TOKEN=x GH_TOKEN=x RUNNER_TEMP="$T"
 q() { # mode run name [extra env...] ; runs in the foreground
   local mode=$1 run=$2 name=$3; shift 3
-  env MODE="$mode" RUN_ID="$run" NAME="$name" LABEL="$name" "$@" bash "$Q"
+  env MODE="$mode" RUN_ID="$run" NAME="$name" LABEL="$name" "$@" "$Q" queue
 }
 tickets() { git --git-dir="$T/remote.git" ls-tree --name-only "tfpls-data:queue/$1/" 2>/dev/null | wc -l | tr -d ' '; }
 
@@ -76,5 +77,7 @@ q enter 502 slow TIMEOUT=0 >"$T/o7" 2>&1; eq "a timeout fails the job with a mes
 TFPLS_REMOTE_URL="$T/missing.git" q enter 601 x >"$T/o8" 2>&1; eq "an unreachable data branch does not block the run" "$?" 0
 BRANCH=main q enter 602 x >"$T/o9" 2>&1; eq "refuses to use main" "$?|$(grep -c refusing "$T/o9")" "0|1"
 q leave 999 never >/dev/null 2>&1; eq "leave without a ticket is a no-op" "$?" 0
+# the wait budget formula is unit-tested in internal/queue (TestBudget)
+eq "action.yml installs the binary, then runs tfpls queue" "$(yq -r '.runs.steps[0].uses' "$here/actions/queue/action.yml")|$(yq -r '.runs.steps[1].run' "$here/actions/queue/action.yml")" "denzhel/tfpls/actions/bin@main|tfpls queue"
 
 done_tests
