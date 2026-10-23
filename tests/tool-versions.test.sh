@@ -8,9 +8,9 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 S="$here/tools/tool-versions.sh"
 W="$here/.github/workflows/tool-versions.yml"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/bin" "$T/stub" "$T/root/actions/setup" "$T/root/.github/workflows"
+mkdir -p "$T/bin" "$T/stub" "$T/root/internal/setup" "$T/root/.github/workflows"
 # the script reads copies of the real files, so the test follows the real defaults and their real layout
-cp "$here/actions/setup/install.sh" "$T/root/actions/setup/install.sh"
+cp "$here/internal/setup/setup.go" "$T/root/internal/setup/setup.go"
 cp "$here/.github/workflows/ci.yml" "$T/root/.github/workflows/ci.yml"
 
 cat > "$T/bin/gh" <<'STUB'
@@ -60,8 +60,8 @@ body() { jq -r '.[0].body // ""' "$STUB_DIR/issues.json"; }
 fresh_log() { : > "$STUB_DIR/log"; }
 hash_root() { find "$T/root" -type f -exec cksum {} + | sort; }
 
-tofu=$(sed -nE 's/^TOFU_VERSION="\$\{TOFU_VERSION:-([0-9.]+)\}".*/\1/p' "$T/root/actions/setup/install.sh")
-conf=$(sed -nE 's/^CONFTEST_VERSION="\$\{CONFTEST_VERSION:-([0-9.]+)\}".*/\1/p' "$T/root/actions/setup/install.sh")
+tofu=$(sed -nE 's/^[[:space:]]*DefaultTofu[[:space:]]*=[[:space:]]*"([0-9.]+)".*/\1/p' "$T/root/internal/setup/setup.go")
+conf=$(sed -nE 's/^[[:space:]]*DefaultConftest[[:space:]]*=[[:space:]]*"([0-9.]+)".*/\1/p' "$T/root/internal/setup/setup.go")
 al=$(sed -nE 's/^[[:space:]]*v=([0-9.]+); sum=.*/\1/p' "$T/root/.github/workflows/ci.yml" | head -1)
 [ -n "$tofu" ] && [ -n "$conf" ] && [ -n "$al" ] && ok "the fixtures follow the real defaults (OpenTofu $tofu, conftest $conf, actionlint $al)" || bad "could not read the real defaults: '$tofu' '$conf' '$al'"
 all_current() { releases opentofu/opentofu "v$tofu"; releases open-policy-agent/conftest "v$conf"; releases rhysd/actionlint "v$al"; }
@@ -85,7 +85,7 @@ b=$(body)
 grep -qF "| OpenTofu | $tofu | [$new](https://github.com/opentofu/opentofu/releases/tag/v$new) |" <<<"$b" && ok "the row names the default and links the latest release" || bad "row: $b"
 eq "the highest published version wins: no pre-release, no draft, no older backport, no non-version tag" "$(grep -c '9\.9\.9\|rc1\|1\.0\.99\|nightly' <<<"$b")" 0
 eq "only the tool that is behind is listed" "$(grep -c '| conftest |\|| actionlint |' <<<"$b")" 0
-grep -q 'actions/setup/install.sh' <<<"$b" && ok "the body says where the default lives" || bad "where: $b"
+grep -q 'internal/setup/setup.go' <<<"$b" && ok "the body says where the default lives" || bad "where: $b"
 grep -q 'OpenTofu' "$T/summary" && ok "the run summary has the table too" || bad "summary: $(cat "$T/summary")"
 
 # --- the same again: no duplicate, no edit
@@ -129,12 +129,12 @@ eq "no published release at all fails too" "$rc|$(calls 'issue close')" "1|0"
 all_current; touch "$STUB_DIR/fail-list"; fresh_log; run
 eq "the open issues cannot be listed: fail, open nothing" "$rc|$(calls 'issue create')|$(calls 'issue close')" "1|0|0"
 rm -f "$STUB_DIR/fail-list"
-mkdir -p "$T/broken/actions/setup" "$T/broken/.github/workflows"
-sed 's/^TOFU_VERSION=.*/TOFU_VERSION="${TOFU_VERSION:?}"/' "$T/root/actions/setup/install.sh" > "$T/broken/actions/setup/install.sh"
+mkdir -p "$T/broken/internal/setup" "$T/broken/.github/workflows"
+sed 's/^[[:space:]]*DefaultTofu[[:space:]]*=.*/DefaultTofu = os.Getenv("X")/' "$T/root/internal/setup/setup.go" > "$T/broken/internal/setup/setup.go"
 cp "$T/root/.github/workflows/ci.yml" "$T/broken/.github/workflows/ci.yml"
 fresh_log; ROOT="$T/broken" run
 eq "a default that cannot be read fails the run and changes no issue" "$rc|$(calls 'issue')" "1|0"
-grep -q '::error::.*actions/setup/install.sh' "$T/out" && ok "the error names the file" || bad "error: $(cat "$T/out")"
+grep -q '::error::.*internal/setup/setup.go' "$T/out" && ok "the error names the file" || bad "error: $(cat "$T/out")"
 
 # --- it never edits a file
 eq "no file under the checked tree changed in any run" "$(hash_root)" "$before"
