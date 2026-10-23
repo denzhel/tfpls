@@ -16,6 +16,17 @@
 - Do not use third-party actions without pinning them to a commit SHA; do not add dependencies the runners would have to install without a checksum-verified download.
 - Container images (if any) are Alpine or other minimal images.
 
+## Engine end-to-end tests
+
+`internal/e2e` (build tag `e2e`, so plain `go test ./...` stays fast and needs no OpenTofu) runs the real `tfpls` binary against real OpenTofu with a local backend and `terraform_data` resources: plan with and without changes, a saved reviewed plan applied by a separate invocation (and refused for changed code, a wrong key or a tampered file), a targeted apply, a state lock held by a second `tofu` and read by `tfpls tofu` and `tfpls unlock`, drift and its fix, a conftest policy, and the installed OpenTofu against the pinned default. GitHub is the fake `gh` of `internal/e2e/ghstub`. No cloud, no secrets; the CI job `engine-e2e` runs it on every pull request, forks included.
+
+```
+go test -count=1 -v -tags e2e ./internal/e2e/...                  # installs OpenTofu and conftest with `tfpls setup` (cached in ~/.cache/tfpls)
+TFPLS_E2E_TOFU=1 go test -count=1 -tags e2e ./internal/e2e/...    # use the tofu already on the PATH (skips the pinned-version check)
+```
+
+Add a scenario as a `Test...` function in `internal/e2e/scenarios_test.go` with a fixture under `internal/e2e/testdata`, assert exact output, and check that it fails when you break the code it covers.
+
 ## Releases
 
 Semantic versioning: breaking changes to inputs, config keys or behaviour callers rely on bump the major version. Release once per batch of changes, testing it first on a pre-release tag (`vX.Y.Z-rc.N`, which does not move `v0`); see [docs/releasing.md](docs/releasing.md#for-maintainers-when-to-release). `tools/release.sh` cuts a release and moves the major tag; see [docs/releasing.md](docs/releasing.md).

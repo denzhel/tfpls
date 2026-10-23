@@ -6,6 +6,7 @@ Versions below 1.0 (0.x): the interface may still change between minor versions;
 
 ## Unreleased
 
+- Maintainers: engine end-to-end tests (`internal/e2e`, build tag `e2e`, CI job `engine-e2e`): the real `tfpls` with real OpenTofu (installed by `tfpls setup`), a local backend and `terraform_data`, covering plan, saved reviewed plan and its refusals, targeted apply, the real state-lock text, drift and drift-fix, a policy and the pinned OpenTofu version; no cloud, no secrets, runs on forks.
 - Maintainers: the checks that only read repository files (pins, timeouts, secrets exposure, the entry workflow, dependabot, docs links, defaults and anchors, README opening, TF_ names) moved from 13 `tests/*.test.sh` files with `yq`/`grep` to Go tests in `internal/repocheck`, run by `go test ./...`; same assertions, plus fixtures that prove each guard can fail. `tests/bash32.test.sh` stays.
 - Maintainers: the tests and CI no longer need `jq`, `yq` or `python3` (only the optional `notify_template` checks use `jq`, the program that feature runs with, and skip without it): the YAML parity test uses golden files, the CI YAML check and the workflow wiring checks are Go tests in `internal/repocheck`, the OIDC, install, notify, policy, pty and dashboard-data checks moved to Go tests next to the code, and the remaining shell tests build their stubs with `printf` and read output with `grep`/`sed`.
 
