@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-# PR comment formatting: safe plan clipping (actions/tofu/format.sh) and marking outdated comments (actions/mark-outdated).
+# PR comment formatting: safe plan clipping (`tfpls tofu fmt`, internal/tofu) and marking outdated comments (actions/mark-outdated).
 # Run: bash tests/comments.test.sh
 set -uo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-. "$here/actions/tofu/format.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 (cd "$here" && go build -o "$T/tfpls" ./cmd/tfpls) || { echo "FAIL go build ./cmd/tfpls"; exit 1; }
+# the comment helpers of the Go engine, called the way the Bash functions were
+tfpls_clip_plan() { "$T/tfpls" tofu fmt clip "$@"; }
+tfpls_strip_refresh() { "$T/tfpls" tofu fmt strip-refresh; }
+tfpls_plan_line() { "$T/tfpls" tofu fmt plan-line "$@"; }
+tfpls_apply_line() { "$T/tfpls" tofu fmt apply-line "$@"; }
+tfpls_apply_view() { "$T/tfpls" tofu fmt apply-view; }
+tfpls_comment_body() { "$T/tfpls" tofu fmt comment-body "$@"; }
+tfpls_already_applied_body() { "$T/tfpls" tofu fmt already-applied-body "$@"; }
 
 # ---- tfpls_clip_plan
 printf 'small plan\nPlan: 1 to add, 0 to change, 0 to destroy.\n' > "$T/small.txt"
@@ -110,9 +117,6 @@ b=$(tfpls_already_applied_body "$M" dev "https://run/222" "https://run/111")
 [ "$(sed -n 3p <<<"$b")" = '🟢 **[dev](https://run/222)**: Already applied by `/tofu apply` ([run](https://run/111)); nothing changed since.' ] \
   && ok "the compact comment is one line: the workspace links this run, the sentence links the /tofu apply run" || bad "compact line: $(sed -n 3p <<<"$b")"
 [ "$(printf '%s\n' "$b" | wc -l | tr -d ' ')" = 3 ] && ! grep -q '<details>\|plan logs\|to apply$' <<<"$b" && ok "the compact comment has no plan section, no 'plan logs' heading and no apply hint" || bad "compact body: $b"
-RS="$here/actions/tofu/run.sh"
-grep -q 'tfpls_apply_view < apply.txt > apply_view.txt' "$RS" && grep -q 'shown="$REPO_ROOT/$DIR/apply_view.txt"' "$RS" && ok "run.sh builds the apply view after a successful apply and uses it for the comment" || bad "run.sh wiring"
-grep -q 'apply_view.txt init.txt' "$RS" && ok "the apply view file is cleaned up" || bad "cleanup"
 
 # ---- mark-outdated with a stub gh
 mkdir "$T/bin"; cat > "$T/bin/gh" <<'STUB'
@@ -158,7 +162,7 @@ J
 rm -f "$T/patched" "$T/bodies"; env -i PATH="$T/bin:$PATH" STUB_DIR="$T" STUB_COMMENTS="$T/several.json" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 SHA=abcdef1234567 NAMES='[]' "$T/tfpls" mark-outdated >/dev/null 2>&1
 [ "$(cat "$T/patched" 2>/dev/null)" = "repos/o/r/issues/comments/21" ] && ok "with several comments of a workspace only the newest is marked outdated" || bad "patched: $(cat "$T/patched" 2>/dev/null | tr '\n' ' ')"
 
-# ---- tfpls_post_comment: every run posts a new comment, the older ones get a "superseded" banner
+# ---- `tfpls tofu fmt post-comment`: every run posts a new comment, the older ones get a "superseded" banner
 mkdir "$T/bin2"; cat > "$T/bin2/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$*" in
@@ -183,9 +187,9 @@ cat > "$T/posted.json" <<'J'
 ]
 J
 post() { rm -f "$T/calls" "$T/bodies"; env -i PATH="$T/bin2:$PATH" STUB_DIR="$T" STUB_COMMENTS="${1:-$T/posted.json}" GH_TOKEN=x GITHUB_REPOSITORY=o/r PR=7 ${STUB_FAIL_PATCH:+STUB_FAIL_PATCH=1} ${STUB_FAIL_POST:+STUB_FAIL_POST=1} \
-  bash -c '. "$1/actions/tofu/post.sh"; tfpls_post_comment "<!-- tfpls:terraform/dev -->" "NEW PLAN BODY"' _ "$here" > "$T/post.out" 2>&1; rc=$?; }
+  "$T/tfpls" tofu fmt post-comment "<!-- tfpls:terraform/dev -->" "NEW PLAN BODY" > "$T/post.out" 2>&1; rc=$?; }
 post
-[ $rc -eq 0 ] && ok "tfpls_post_comment succeeds" || bad "rc=$rc"
+[ $rc -eq 0 ] && ok "post-comment succeeds" || bad "rc=$rc"
 [ "$(head -1 "$T/calls")" = POST ] && ok "the new comment is posted first (a failure never leaves the pull request without a plan)" || bad "calls: $(tr '\n' ' ' < "$T/calls")"
 [ "$(sed -n '2,$p' "$T/calls" | sort | tr '\n' ' ')" = "PATCH repos/o/r/issues/comments/10 PATCH repos/o/r/issues/comments/15 " ] && ok "every older plan comment of this workspace gets the banner; nothing else is edited" || bad "calls: $(tr '\n' ' ' < "$T/calls")"
 grep -q 'comments/12\|comments/13\|comments/14\|comments/11' "$T/calls" && bad "a stranger's, a human's, another workspace's or an already superseded comment was edited" || ok "a stranger's marker comment, human comments, other workspaces and superseded comments are never edited (negative cases)"
@@ -215,7 +219,6 @@ grep -q 'Superseded\*\* by' "$T/bodies" && grep -q 'Apply complete!' "$T/bodies"
 printf '%s\n' '[{"id":42,"user":{"type":"Bot"},"body":"<!-- tfpls:terraform/dev -->\n<!-- tfpls-status: planned -->\n**Plan:** 1 to add\n### 📝 x\n\n<details>\n\n```terraform\nthe text `/tofu apply dev` to apply inside the plan stays\nPlan: 1 to add\n```\n</details>\n\n`/tofu apply dev` to apply"}]' > "$T/hint3.json"
 post "$T/hint3.json"
 [ "$(grep -c '/tofu apply dev' "$T/bodies")" = 1 ] && grep -q 'inside the plan stays' "$T/bodies" && ok "the same words inside the plan text are kept; only the trailing hint line is removed (negative case)" || bad "mid-text changed: $(grep -n 'tofu apply' "$T/bodies")"
-grep -q 'tofu apply' "$here/actions/tofu/post.sh" && ok "post.sh documents and implements the hint removal" || bad "post.sh"
 
 STUB_FAIL_POST=1 post
 [ "$(tr '\n' ' ' < "$T/calls")" = "POST " ] && grep -q '::error::could not post the plan comment' "$T/post.out" && ok "a failing post is an ::error:: and no older comment is marked superseded" || bad "calls: $(tr '\n' ' ' < "$T/calls") out: $(cat "$T/post.out")"
