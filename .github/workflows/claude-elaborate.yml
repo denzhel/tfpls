@@ -137,7 +137,7 @@ jobs:
           ISSUE_MD: ${{ needs.gate.outputs.issue_md }}
         run: printf '%s\n' "$ISSUE_MD" > "$RUNNER_TEMP/issue.md"
       - id: claude
-        uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
+        uses: anthropics/claude-code-action@aa8a7738e48bf30a40ee499ce818bef081c5ab5e # v1.0.257
         env:
           GH_TOKEN: ${{ github.token }}
         with:
